@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -9,6 +10,7 @@ import (
 
 	"costume-tree/internal/application"
 	"costume-tree/internal/config"
+	"costume-tree/internal/storage"
 	"costume-tree/internal/web"
 )
 
@@ -20,13 +22,27 @@ func main() {
 	}
 }
 
-func run(logger *slog.Logger) error {
+func run(logger *slog.Logger) (runErr error) {
 	settings, err := config.Load(os.LookupEnv)
 	if err != nil {
 		return err
 	}
 
-	handler, err := web.New(logger)
+	database, err := storage.Open(settings.DatabasePath)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer func() {
+		if closeErr := database.Close(); closeErr != nil && runErr == nil {
+			runErr = fmt.Errorf("close database: %w", closeErr)
+		}
+	}()
+
+	if err := database.Migrate(context.Background()); err != nil {
+		return fmt.Errorf("migrate database: %w", err)
+	}
+
+	handler, err := web.New(logger, database)
 	if err != nil {
 		return err
 	}

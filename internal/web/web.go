@@ -5,6 +5,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -18,6 +19,11 @@ import (
 var content embed.FS
 
 type handlerFunc func(http.ResponseWriter, *http.Request) error
+
+// Readiness is the application dependency check used by /healthz.
+type Readiness interface {
+	Ready(context.Context) error
+}
 
 // Error describes an HTTP failure while retaining its internal cause.
 type Error struct {
@@ -35,9 +41,14 @@ func (e *Error) Unwrap() error {
 }
 
 // New constructs the application HTTP handler from embedded content.
-func New(logger *slog.Logger) (http.Handler, error) {
+// A readiness dependency may be supplied by the composition root. Omitting it
+// preserves the no-database scaffold and reports the process as healthy.
+func New(logger *slog.Logger, readiness ...Readiness) (http.Handler, error) {
 	if logger == nil {
 		return nil, errors.New("web: logger is required")
+	}
+	if len(readiness) > 1 {
+		return nil, errors.New("web: only one readiness dependency is supported")
 	}
 
 	pages, err := template.ParseFS(content, "templates/*.html")
@@ -49,16 +60,22 @@ func New(logger *slog.Logger) (http.Handler, error) {
 		return nil, fmt.Errorf("web: open embedded assets: %w", err)
 	}
 
-	server := &server{logger: logger, pages: pages}
+	server := &server{logger: logger}
+	if len(readiness) == 1 {
+		server.readiness = readiness[0]
+	}
+	server.pages = pages
 	mux := http.NewServeMux()
 	mux.Handle("GET /assets/", cacheAssets(http.StripPrefix("/assets/", http.FileServer(http.FS(assets)))))
 	mux.Handle("GET /{$}", server.handle("home", server.home))
+	mux.HandleFunc("GET /healthz", server.health)
 	return mux, nil
 }
 
 type server struct {
-	logger *slog.Logger
-	pages  *template.Template
+	logger    *slog.Logger
+	pages     *template.Template
+	readiness Readiness
 }
 
 func (s *server) home(w http.ResponseWriter, _ *http.Request) error {
@@ -71,6 +88,19 @@ func (s *server) home(w http.ResponseWriter, _ *http.Request) error {
 	w.Header().Set("Cache-Control", "no-store")
 	_, err := page.WriteTo(w)
 	return err
+}
+
+func (s *server) health(w http.ResponseWriter, r *http.Request) {
+	if s.readiness != nil {
+		if err := s.readiness.Ready(r.Context()); err != nil {
+			s.logger.Warn("health check failed", "error", err)
+			http.Error(w, "unhealthy", http.StatusServiceUnavailable)
+			return
+		}
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok\n"))
 }
 
 func (s *server) handle(name string, next handlerFunc) http.HandlerFunc {
