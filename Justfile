@@ -1,0 +1,85 @@
+set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+
+image := env_var_or_default("IMAGE", "costume-tree:dev")
+container := env_var_or_default("CONTAINER", "costume-tree")
+volume := env_var_or_default("VOLUME", "costume-tree-data")
+port := env_var_or_default("PORT", "8080")
+
+# Show the available project commands.
+default:
+    @just --list
+
+# Run the Go unit and integration tests.
+test:
+    go test ./...
+
+# Run static analysis.
+vet:
+    go vet ./...
+
+# Run the local verification gate.
+check: test vet
+
+# Format tracked Go sources.
+fmt:
+    gofmt -w $$(git ls-files '*.go')
+
+# Start the application from the host Go toolchain.
+run:
+    go run ./cmd/costume-tree
+
+# Build the production binary.
+build:
+    go build ./cmd/costume-tree
+
+# Build the OCI image. Override IMAGE=... when needed.
+image:
+    docker build --tag {{image}} .
+
+# Create the persistent volume and start a foreground container.
+up: image
+    @docker volume create {{volume}} >/dev/null
+    @docker rm --force {{container}} >/dev/null 2>&1 || true
+    docker run --rm --name {{container}} --publish {{port}}:8080 --volume {{volume}}:/data {{image}}
+
+# Start a detached container for local management recipes.
+start: image
+    @docker volume create {{volume}} >/dev/null
+    @docker rm --force {{container}} >/dev/null 2>&1 || true
+    docker run --detach --name {{container}} --publish {{port}}:8080 --volume {{volume}}:/data {{image}}
+
+# Stop and remove the managed container; data remains in VOLUME.
+stop:
+    @docker stop {{container}} >/dev/null 2>&1 || true
+    @docker rm {{container}} >/dev/null 2>&1 || true
+
+# Follow managed container logs.
+logs:
+    docker logs --follow {{container}}
+
+# Check the local health endpoint.
+health:
+    curl --fail --silent --show-error http://127.0.0.1:{{port}}/healthz
+
+# Open a shell in the managed container.
+shell:
+    docker exec --interactive --tty {{container}} /bin/sh
+
+# Create a validated backup in backups/NAME and leave the volume untouched.
+backup name="costume-tree-backup.db":
+    @mkdir -p backups
+    docker exec {{container}} /costume-tree backup /data/{{name}}
+    docker cp {{container}}:/data/{{name}} backups/{{name}}
+    @printf 'backup: backups/%s\n' '{{name}}'
+
+# Restore a backup into a new volume.
+restore backup destination="restored.db" restore_volume="costume-tree-restore":
+    @docker volume create {{restore_volume}} >/dev/null
+    docker run --rm --user 0 --entrypoint /bin/sh --volume "$(pwd)/{{backup}}:/source/backup.db:ro" --volume {{restore_volume}}:/data {{image}} -c "cp /source/backup.db /data/.restore-input.db && chown 65532:65532 /data/.restore-input.db && /costume-tree restore /data/.restore-input.db /data/{{destination}} && rm -f /data/.restore-input.db"
+    @printf 'restored: volume=%s path=/data/%s\n' '{{restore_volume}}' '{{destination}}'
+
+# Remove the managed container and its persistent volume.
+clean:
+    @docker stop {{container}} >/dev/null 2>&1 || true
+    @docker rm {{container}} >/dev/null 2>&1 || true
+    @docker volume rm {{volume}} >/dev/null 2>&1 || true

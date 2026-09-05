@@ -17,6 +17,29 @@ go vet ./...
 go run ./cmd/costume-tree
 ```
 
+## Justfile shortcuts
+
+Install [just](https://just.systems/) and inspect the available recipes:
+
+```sh
+just --list
+just check
+just image
+```
+
+Container management uses `IMAGE`, `CONTAINER`, `VOLUME`, and `PORT` environment overrides:
+
+```sh
+IMAGE=costume-tree:dev CONTAINER=costume-tree VOLUME=costume-tree-data PORT=8080 just start
+PORT=8080 just health
+CONTAINER=costume-tree just logs
+CONTAINER=costume-tree just backup costume-tree-backup.db
+just restore backups/costume-tree-backup.db restored.db costume-tree-restore
+CONTAINER=costume-tree VOLUME=costume-tree-data just stop
+```
+
+`just restore` stages a host-owned backup with a short-lived helper, then runs the application’s validated cold-restore command into a new volume.
+
 The default local process expects `/data` to exist and uses:
 
 - `COSTUME_TREE_ADDR=:8080`
