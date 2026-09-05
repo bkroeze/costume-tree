@@ -649,7 +649,8 @@ func (r *costumeItemRepository) List(ctx context.Context, filter CostumeItemFilt
 		args = append(args, filter.Status)
 	}
 	if filter.Incomplete {
-		query += ` AND progress < 100`
+		query += ` AND status <> ?`
+		args = append(args, StatusComplete)
 	}
 	if filter.Blocked {
 		query += ` AND status = ?`

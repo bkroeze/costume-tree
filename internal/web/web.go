@@ -87,8 +87,10 @@ func New(logger *slog.Logger, readiness ...Readiness) (http.Handler, error) {
 		productions := storage.NewProductionRepository(database)
 		actors := storage.NewActorRepository(database)
 		itemTypes := storage.NewItemTypeRepository(database)
+		costumeItems := storage.NewCostumeItemRepository(database)
 		actorHandler := NewActorHandler(productions, actors, pages, itemTypes)
 		itemTypeHandler := NewItemTypeHandler(productions, itemTypes, pages)
+		costumeItemHandler := NewCostumeItemHandler(productions, actors, itemTypes, costumeItems, pages)
 
 		mux.Handle("GET /{$}", server.handle("production", actorHandler.Production))
 		mux.Handle("GET /production", server.handle("production", actorHandler.Production))
@@ -104,6 +106,14 @@ func New(logger *slog.Logger, readiness ...Readiness) (http.Handler, error) {
 		mux.Handle("POST /production/{production}/item-types/{id}/rename", server.handle("item-type-rename", itemTypeHandler.RenameItemType))
 		mux.Handle("POST /production/{production}/item-types/{id}/archive", server.handle("item-type-archive", itemTypeHandler.ArchiveItemType))
 		mux.Handle("POST /production/{production}/item-types/{id}/restore", server.handle("item-type-restore", itemTypeHandler.RestoreItemType))
+
+		mux.Handle("GET /production/{production}/actors/{actor}/items", server.handle("costume-items", costumeItemHandler.ListCostumeItems))
+		mux.Handle("POST /production/{production}/actors/{actor}/items", server.handle("costume-item-create", costumeItemHandler.CreateCostumeItem))
+		mux.Handle("GET /production/{production}/actors/{actor}/items/{item}", server.handle("costume-item", costumeItemHandler.DetailCostumeItem))
+		mux.Handle("GET /production/{production}/actors/{actor}/items/{item}/edit", server.handle("costume-item-edit", costumeItemHandler.EditCostumeItem))
+		mux.Handle("POST /production/{production}/actors/{actor}/items/{item}/edit", server.handle("costume-item-update", costumeItemHandler.EditCostumeItem))
+		mux.Handle("POST /production/{production}/actors/{actor}/items/{item}/archive", server.handle("costume-item-archive", costumeItemHandler.ArchiveCostumeItem))
+		mux.Handle("GET /production/{production}/items/code/{code}", server.handle("costume-item-code", costumeItemHandler.LookupCostumeItem))
 	} else {
 		mux.Handle("GET /{$}", server.handle("home", server.home))
 	}

@@ -85,7 +85,7 @@
   {{if .Empty}}<article class="form-card"><p class="form-feedback" role="status">No active actors yet. Add the first actor below.</p></article>{{else}}
     {{range .Actors}}
     <article class="actor-block">
-      <header class="actor-summary-bar"><div class="actor-info"><span class="badge-icon" aria-hidden="true">A</span><div><h3 class="actor-name-text">{{.Name}}</h3><p class="actor-role-text">{{if .Role}}{{.Role}}{{else}}Role not assigned{{end}}</p></div></div><div class="header-actions"><a class="btn-brutal btn-white btn-sm" href="/actors/{{.ID}}/edit">Edit</a><form action="/actors/{{.ID}}/archive" method="post" hx-post="/actors/{{.ID}}/archive" hx-target="#actor-list" hx-swap="outerHTML"><button class="btn-brutal btn-white btn-sm" type="submit">Archive</button></form></div></header>
+      <header class="actor-summary-bar"><div class="actor-info"><span class="badge-icon" aria-hidden="true">A</span><div><h3 class="actor-name-text">{{.Name}}</h3><p class="actor-role-text">{{if .Role}}{{.Role}}{{else}}Role not assigned{{end}}</p></div></div><div class="header-actions"><a class="btn-brutal btn-white btn-sm" href="/production/{{$.Production.ID}}/actors/{{.ID}}/items">Costume items</a><a class="btn-brutal btn-white btn-sm" href="/actors/{{.ID}}/edit">Edit</a><form action="/actors/{{.ID}}/archive" method="post" hx-post="/actors/{{.ID}}/archive" hx-target="#actor-list" hx-swap="outerHTML"><button class="btn-brutal btn-white btn-sm" type="submit">Archive</button></form></div></header>
       {{with .Notes}}<p class="piece-description">{{.}}</p>{{end}}
     </article>
     {{end}}

@@ -137,18 +137,18 @@ type CreateCostumeItemInput struct {
 	Blocker      string
 	Notes        string
 }
-
 type UpdateCostumeItemInput struct {
-	ProductionID int64
-	ID           int64
-	ActorID      int64
-	ItemTypeID   int64
-	Description  string
-	Status       string
-	Progress     int
-	NextAction   string
-	Blocker      string
-	Notes        string
+	ProductionID      int64
+	ID                int64
+	ActorID           int64
+	ItemTypeID        int64
+	Description       string
+	Status            string
+	Progress          int
+	NextAction        string
+	Blocker           string
+	Notes             string
+	ExpectedUpdatedAt *time.Time
 }
 
 type CostumeItemFilter struct {
