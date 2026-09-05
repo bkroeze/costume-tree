@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -25,6 +27,18 @@ var costumeItemStatuses = []string{
 	storage.StatusBlocked,
 	storage.StatusReady,
 	storage.StatusComplete,
+}
+
+const costumeItemMultipartMemory = 8 << 20
+
+// PhotoService validates, stores, lists, and resolves costume item photos.
+// Upload persists the original before returning; derivative processing may
+// continue after the request has redirected to the item detail page.
+type PhotoService interface {
+	Validate(*multipart.FileHeader) error
+	Upload(context.Context, storage.CostumeItem, *multipart.FileHeader) (storage.CostumeItemPhoto, error)
+	List(context.Context, int64, int64) ([]storage.CostumeItemPhoto, error)
+	Resolve(context.Context, int64, int64, int64, string) (storage.CostumeItemPhoto, string, error)
 }
 
 type CostumeItemView struct {
@@ -62,6 +76,12 @@ type CostumeItemFormView struct {
 	Errors      FieldErrors
 }
 
+type CostumeItemPhotoView struct {
+	storage.CostumeItemPhoto
+	OriginalURL  string
+	DisplayURL   string
+	ThumbnailURL string
+}
 type CostumeItemPageModel struct {
 	Title      string
 	Production storage.Production
@@ -73,6 +93,8 @@ type CostumeItemPageModel struct {
 	Item       *CostumeItemView
 	Form       CostumeItemFormView
 	Statuses   []string
+	Photos     []CostumeItemPhotoView
+	HasPending bool
 	Error      string
 	Success    string
 	Lookup     string
@@ -86,19 +108,23 @@ type CostumeItemHandler struct {
 	itemTypes   storage.ItemTypeRepository
 	items       storage.CostumeItemRepository
 	pages       *template.Template
+	photos      PhotoService
 }
 
-// NewCostumeItemHandler constructs a handler from production-scoped repositories.
-// A supplied template set is extended with the costume item templates.
-func NewCostumeItemHandler(productions storage.ProductionRepository, actors storage.ActorRepository, itemTypes storage.ItemTypeRepository, items storage.CostumeItemRepository, pages ...*template.Template) *CostumeItemHandler {
-	parsed := mustCostumeItemTemplates()
-	if len(pages) > 0 && pages[0] != nil {
-		parsed = pages[0]
-		if _, err := parsed.ParseFS(costumeItemTemplates, "templates/costume_items.html"); err != nil {
-			parsed = mustCostumeItemTemplates()
-		}
+// NewCostumeItemHandler constructs a handler from production-scoped
+// repositories, an explicit template set, and the photo service.
+func NewCostumeItemHandler(productions storage.ProductionRepository, actors storage.ActorRepository, itemTypes storage.ItemTypeRepository, items storage.CostumeItemRepository, pages *template.Template, photos PhotoService) *CostumeItemHandler {
+	if pages == nil {
+		pages = mustCostumeItemTemplates()
 	}
-	return &CostumeItemHandler{productions: productions, actors: actors, itemTypes: itemTypes, items: items, pages: parsed}
+	return &CostumeItemHandler{
+		productions: productions,
+		actors:      actors,
+		itemTypes:   itemTypes,
+		items:       items,
+		pages:       pages,
+		photos:      photos,
+	}
 }
 
 func mustCostumeItemTemplates() *template.Template {
@@ -144,11 +170,24 @@ func (h *CostumeItemHandler) CreateCostumeItem(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return err
 	}
-	if err := r.ParseForm(); err != nil {
-		return &Error{Status: http.StatusBadRequest, Message: "Unable to read the costume item form.", Err: fmt.Errorf("parse costume item form: %w", err)}
+	photo, err := parseCostumeItemRequest(r)
+	if err != nil {
+		return err
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
 	}
 	form := costumeItemFormFromRequest(r, false, 0)
 	model, input, valid := h.validateForm(r.Context(), production, actor, form)
+	if photo != nil {
+		if h.photos == nil {
+			return photoServiceUnavailable()
+		}
+		if err := h.photos.Validate(photo); err != nil {
+			model.Form.Errors = addFieldError(model.Form.Errors, "photo", "Choose a valid JPEG, PNG, or GIF photo.")
+			valid = false
+		}
+	}
 	if !valid {
 		return h.renderFormError(w, r, http.StatusUnprocessableEntity, model)
 	}
@@ -156,7 +195,17 @@ func (h *CostumeItemHandler) CreateCostumeItem(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return h.storageError("create costume item", err)
 	}
+	detailPath := costumeItemDetailPath(productionID, actorID, item.ID)
+	if photo != nil {
+		if _, err := h.photos.Upload(r.Context(), item, photo); err != nil {
+			detailPath += "?photo=failed"
+		}
+	}
 	SetTrigger(w, "costume-item:created")
+	if photo != nil {
+		Redirect(w, r, detailPath, http.StatusSeeOther)
+		return nil
+	}
 	if IsHTMX(r) {
 		items, listErr := h.items.List(r.Context(), storage.CostumeItemFilter{ProductionID: productionID, ActorID: actorID})
 		if listErr != nil {
@@ -179,23 +228,84 @@ func (h *CostumeItemHandler) DetailCostumeItem(w http.ResponseWriter, r *http.Re
 	if r.Method != http.MethodGet {
 		return costumeItemMethodError("costume item detail requires GET")
 	}
-	production, actor, err := h.scope(r.Context(), productionID, actorID)
+	production, actor, item, err := h.scopedItem(r.Context(), productionID, actorID, itemID)
 	if err != nil {
 		return err
 	}
-	item, err := h.items.Get(r.Context(), productionID, itemID)
+	model, err := h.detailModel(r.Context(), production, actor, item)
 	if err != nil {
-		return h.storageError("get costume item", err)
+		return err
 	}
-	if item.ActorID != actorID || item.ProductionID != productionID {
-		return costumeItemNotFound()
+	if r.URL.Query().Get("photo") == "failed" {
+		model.Error = "Costume item saved, but the photo could not be attached. Choose it again in Edit item to retry."
 	}
-	view := h.view(r.Context(), productionID, item)
-	model := CostumeItemPageModel{Title: item.Code + " · " + production.Name, Production: production, Actor: actor, Item: &view, Statuses: costumeItemStatuses}
 	if IsHTMX(r) {
 		return RenderFragment(w, h.pages, "costume-item-detail", http.StatusOK, model)
 	}
 	return h.render(w, r, http.StatusOK, "costume-item-page", "costume-item-detail", model)
+}
+
+// CostumeItemPhotoGallery returns the production-, actor-, and item-scoped
+// gallery fragment used by the detail page's pending-photo poller.
+func (h *CostumeItemHandler) CostumeItemPhotoGallery(w http.ResponseWriter, r *http.Request) error {
+	productionID, actorID, itemID, err := costumeItemIDs(r)
+	if err != nil {
+		return err
+	}
+	if r.Method != http.MethodGet {
+		return costumeItemMethodError("costume item photo gallery requires GET")
+	}
+	production, actor, item, err := h.scopedItem(r.Context(), productionID, actorID, itemID)
+	if err != nil {
+		return err
+	}
+	model, err := h.detailModel(r.Context(), production, actor, item)
+	if err != nil {
+		return err
+	}
+	return RenderFragment(w, h.pages, "costume-item-photo-gallery", http.StatusOK, model)
+}
+
+// ServeCostumeItemPhoto serves one immutable photo variant after verifying the
+// complete production, actor, item, and photo scope.
+func (h *CostumeItemHandler) ServeCostumeItemPhoto(w http.ResponseWriter, r *http.Request) error {
+	productionID, actorID, itemID, err := costumeItemIDs(r)
+	if err != nil {
+		return err
+	}
+	if r.Method != http.MethodGet {
+		return costumeItemMethodError("costume item photo requires GET")
+	}
+	if _, _, _, err := h.scopedItem(r.Context(), productionID, actorID, itemID); err != nil {
+		return err
+	}
+	if h.photos == nil {
+		return photoServiceUnavailable()
+	}
+	photoID, err := costumeItemPhotoID(r)
+	if err != nil {
+		return err
+	}
+	variant := costumeItemPhotoVariant(r)
+	switch variant {
+	case "original", "display", "thumbnail":
+	default:
+		return costumeItemNotFound()
+	}
+	photo, path, err := h.photos.Resolve(r.Context(), productionID, itemID, photoID, variant)
+	if err != nil {
+		return h.photoError("resolve costume item photo", err)
+	}
+	if photo.ProductionID != productionID || photo.CostumeItemID != itemID || photo.ID != photoID {
+		return costumeItemNotFound()
+	}
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	if photo.MediaType != "" {
+		w.Header().Set("Content-Type", photo.MediaType)
+	}
+	http.ServeFile(w, r, path)
+	return nil
 }
 
 // EditCostumeItem serves an edit form and updates the item on POST.
@@ -204,16 +314,9 @@ func (h *CostumeItemHandler) EditCostumeItem(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return err
 	}
-	production, actor, err := h.scope(r.Context(), productionID, actorID)
+	production, actor, item, err := h.scopedItem(r.Context(), productionID, actorID, itemID)
 	if err != nil {
 		return err
-	}
-	item, err := h.items.Get(r.Context(), productionID, itemID)
-	if err != nil {
-		return h.storageError("get costume item", err)
-	}
-	if item.ActorID != actorID || item.ProductionID != productionID {
-		return costumeItemNotFound()
 	}
 	if item.ArchivedAt != nil {
 		return h.storageError("edit costume item", storage.ErrArchived)
@@ -224,8 +327,12 @@ func (h *CostumeItemHandler) EditCostumeItem(w http.ResponseWriter, r *http.Requ
 	if r.Method != http.MethodPost {
 		return costumeItemMethodError("costume item edit requires GET or POST")
 	}
-	if err := r.ParseForm(); err != nil {
-		return &Error{Status: http.StatusBadRequest, Message: "Unable to read the costume item form.", Err: fmt.Errorf("parse costume item form: %w", err)}
+	photo, err := parseCostumeItemRequest(r)
+	if err != nil {
+		return err
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
 	}
 	form := costumeItemFormFromRequest(r, true, item.ID)
 	if form.UpdatedAt == "" {
@@ -236,7 +343,18 @@ func (h *CostumeItemHandler) EditCostumeItem(w http.ResponseWriter, r *http.Requ
 		return h.renderEdit(w, r, http.StatusConflict, production, actor, item, form)
 	}
 	model, input, valid := h.validateForm(r.Context(), production, actor, form)
+	if photo != nil {
+		if h.photos == nil {
+			return photoServiceUnavailable()
+		}
+		if err := h.photos.Validate(photo); err != nil {
+			model.Form.Errors = addFieldError(model.Form.Errors, "photo", "Choose a valid JPEG, PNG, or GIF photo.")
+			valid = false
+		}
+	}
 	if !valid {
+		view := h.view(r.Context(), productionID, item)
+		model.Item = &view
 		return h.renderFormError(w, r, http.StatusUnprocessableEntity, model)
 	}
 	update := storage.UpdateCostumeItemInput{
@@ -256,13 +374,25 @@ func (h *CostumeItemHandler) EditCostumeItem(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return h.storageError("update costume item", err)
 	}
+	detailPath := costumeItemDetailPath(productionID, actorID, item.ID)
+	if photo != nil {
+		if _, err := h.photos.Upload(r.Context(), updated, photo); err != nil {
+			detailPath += "?photo=failed"
+		}
+	}
 	SetTrigger(w, "costume-item:updated")
+	if photo != nil {
+		Redirect(w, r, detailPath, http.StatusSeeOther)
+		return nil
+	}
 	if IsHTMX(r) {
-		view := h.view(r.Context(), productionID, updated)
-		model := CostumeItemPageModel{Title: updated.Code + " · " + production.Name, Production: production, Actor: actor, Item: &view, Form: costumeItemFormFromItem(updated), Statuses: costumeItemStatuses}
+		model, err := h.detailModel(r.Context(), production, actor, updated)
+		if err != nil {
+			return err
+		}
 		return RenderFragment(w, h.pages, "costume-item-detail", http.StatusOK, model)
 	}
-	Redirect(w, r, costumeItemDetailPath(productionID, actorID, item.ID), http.StatusSeeOther)
+	Redirect(w, r, detailPath, http.StatusSeeOther)
 	return nil
 }
 
@@ -349,8 +479,11 @@ func (h *CostumeItemHandler) LookupCostumeItem(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return h.storageError("get production", err)
 	}
-	view := h.view(r.Context(), productionID, item)
-	model := CostumeItemPageModel{Title: item.Code + " · " + production.Name, Production: production, Actor: actor, Item: &view, Statuses: costumeItemStatuses, Lookup: code}
+	model, err := h.detailModel(r.Context(), production, actor, item)
+	if err != nil {
+		return err
+	}
+	model.Lookup = code
 	if IsHTMX(r) {
 		return RenderFragment(w, h.pages, "costume-item-detail", http.StatusOK, model)
 	}
@@ -481,6 +614,61 @@ func (h *CostumeItemHandler) listModel(ctx context.Context, production storage.P
 	return model
 }
 
+func (h *CostumeItemHandler) scopedItem(ctx context.Context, productionID, actorID, itemID int64) (storage.Production, storage.Actor, storage.CostumeItem, error) {
+	production, actor, err := h.scope(ctx, productionID, actorID)
+	if err != nil {
+		return storage.Production{}, storage.Actor{}, storage.CostumeItem{}, err
+	}
+	item, err := h.items.Get(ctx, productionID, itemID)
+	if err != nil {
+		return storage.Production{}, storage.Actor{}, storage.CostumeItem{}, h.storageError("get costume item", err)
+	}
+	if item.ProductionID != productionID || item.ActorID != actorID {
+		return storage.Production{}, storage.Actor{}, storage.CostumeItem{}, costumeItemNotFound()
+	}
+	return production, actor, item, nil
+}
+
+func (h *CostumeItemHandler) detailModel(ctx context.Context, production storage.Production, actor storage.Actor, item storage.CostumeItem) (CostumeItemPageModel, error) {
+	view := h.view(ctx, production.ID, item)
+	model := CostumeItemPageModel{
+		Title:      item.Code + " · " + production.Name,
+		Production: production,
+		Actor:      actor,
+		Item:       &view,
+		Statuses:   costumeItemStatuses,
+	}
+	if err := h.addPhotos(ctx, &model, item); err != nil {
+		return CostumeItemPageModel{}, err
+	}
+	return model, nil
+}
+
+func (h *CostumeItemHandler) addPhotos(ctx context.Context, model *CostumeItemPageModel, item storage.CostumeItem) error {
+	if h.photos == nil {
+		return nil
+	}
+	photos, err := h.photos.List(ctx, item.ProductionID, item.ID)
+	if err != nil {
+		return h.photoError("list costume item photos", err)
+	}
+	base := costumeItemDetailPath(item.ProductionID, item.ActorID, item.ID) + "/photos/"
+	model.Photos = make([]CostumeItemPhotoView, 0, len(photos))
+	for _, photo := range photos {
+		photoBase := base + strconv.FormatInt(photo.ID, 10) + "/"
+		model.Photos = append(model.Photos, CostumeItemPhotoView{
+			CostumeItemPhoto: photo,
+			OriginalURL:      photoBase + "original",
+			DisplayURL:       photoBase + "display",
+			ThumbnailURL:     photoBase + "thumbnail",
+		})
+		if photo.Status == storage.PhotoStatusPending {
+			model.HasPending = true
+		}
+	}
+	return nil
+}
+
 func (h *CostumeItemHandler) view(ctx context.Context, productionID int64, item storage.CostumeItem) CostumeItemView {
 	view := CostumeItemView{ID: item.ID, Production: item.ProductionID, ActorID: item.ActorID, ItemTypeID: item.ItemTypeID, Code: item.Code, Description: item.Description, Status: item.Status, Progress: item.Progress, NextAction: item.NextAction, Blocker: item.Blocker, Notes: item.Notes, Archived: item.ArchivedAt != nil, UpdatedAt: formatUpdatedAt(item.UpdatedAt)}
 	if view.Blocker != "" && view.Status != storage.StatusBlocked {
@@ -499,6 +687,30 @@ func (h *CostumeItemHandler) view(ctx context.Context, productionID int64, item 
 	return view
 }
 
+func parseCostumeItemRequest(r *http.Request) (*multipart.FileHeader, error) {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil && r.Header.Get("Content-Type") != "" {
+		return nil, &Error{Status: http.StatusBadRequest, Message: "Unable to read the costume item form.", Err: fmt.Errorf("parse costume item content type: %w", err)}
+	}
+	if mediaType != "multipart/form-data" {
+		if err := r.ParseForm(); err != nil {
+			return nil, &Error{Status: http.StatusBadRequest, Message: "Unable to read the costume item form.", Err: fmt.Errorf("parse costume item form: %w", err)}
+		}
+		return nil, nil
+	}
+	if err := r.ParseMultipartForm(costumeItemMultipartMemory); err != nil {
+		return nil, &Error{Status: http.StatusBadRequest, Message: "Unable to read the costume item form.", Err: fmt.Errorf("parse multipart costume item form: %w", err)}
+	}
+	files := r.MultipartForm.File["photo"]
+	if len(files) > 1 {
+		return nil, &Error{Status: http.StatusBadRequest, Message: "Choose only one photo.", Err: errors.New("web: multiple costume item photos submitted")}
+	}
+	if len(files) == 0 {
+		return nil, nil
+	}
+	return files[0], nil
+}
+
 func costumeItemFormFromRequest(r *http.Request, editing bool, id int64) CostumeItemFormView {
 	return CostumeItemFormView{ID: id, ActorID: parseFormInt(r.FormValue("actor_id")), ItemTypeID: parseFormInt(r.FormValue("item_type_id")), Description: r.FormValue("description"), Status: r.FormValue("status"), Progress: r.FormValue("progress"), NextAction: r.FormValue("next_action"), Blocker: r.FormValue("blocker"), Notes: r.FormValue("notes"), UpdatedAt: r.FormValue("updated_at"), Editing: editing}
 }
@@ -511,9 +723,13 @@ func parseFormInt(value string) int64 {
 }
 
 func (h *CostumeItemHandler) renderEdit(w http.ResponseWriter, r *http.Request, status int, production storage.Production, actor storage.Actor, item storage.CostumeItem, form CostumeItemFormView) error {
-	model := CostumeItemPageModel{Title: "Edit " + item.Code, Production: production, Actor: actor, Item: func() *CostumeItemView { v := h.view(r.Context(), production.ID, item); return &v }(), Form: form, Statuses: costumeItemStatuses}
+	view := h.view(r.Context(), production.ID, item)
+	model := CostumeItemPageModel{Title: "Edit " + item.Code, Production: production, Actor: actor, Item: &view, Form: form, Statuses: costumeItemStatuses}
 	model.Actors, model.ItemTypes = h.selectors(r.Context(), production.ID)
-	return h.render(w, r, status, "costume-item-page", "costume-item-form", model)
+	if err := h.addPhotos(r.Context(), &model, item); err != nil {
+		return err
+	}
+	return h.render(w, r, status, "costume-item-page", "costume-item-edit", model)
 }
 func (h *CostumeItemHandler) selectors(ctx context.Context, productionID int64) ([]storage.Actor, []storage.ItemType) {
 	actors, _ := h.actors.List(ctx, productionID)
@@ -522,9 +738,22 @@ func (h *CostumeItemHandler) selectors(ctx context.Context, productionID int64) 
 }
 func (h *CostumeItemHandler) renderFormError(w http.ResponseWriter, r *http.Request, status int, model CostumeItemPageModel) error {
 	model.Actors, model.ItemTypes = h.selectors(r.Context(), model.Production.ID)
+	if model.Form.Editing && model.Item != nil {
+		item, err := h.items.Get(r.Context(), model.Production.ID, model.Item.ID)
+		if err != nil {
+			return h.storageError("get costume item", err)
+		}
+		if err := h.addPhotos(r.Context(), &model, item); err != nil {
+			return err
+		}
+	}
 	if IsHTMX(r) {
 		SetTrigger(w, "costume-item:error")
-		return RenderFragment(w, h.pages, "costume-item-form", status, model)
+		name := "costume-item-form"
+		if model.Form.Editing {
+			name = "costume-item-edit"
+		}
+		return RenderFragment(w, h.pages, name, status, model)
 	}
 	if !model.Form.Editing {
 		items, err := h.items.List(r.Context(), storage.CostumeItemFilter{ProductionID: model.Production.ID, ActorID: model.Actor.ID})
@@ -538,7 +767,7 @@ func (h *CostumeItemHandler) renderFormError(w http.ResponseWriter, r *http.Requ
 		model.Empty = len(model.Items) == 0
 		return h.render(w, r, status, "costume-items-page", "costume-item-form", model)
 	}
-	return h.render(w, r, status, "costume-item-page", "costume-item-form", model)
+	return h.render(w, r, status, "costume-item-page", "costume-item-edit", model)
 }
 func (h *CostumeItemHandler) render(w http.ResponseWriter, r *http.Request, status int, fullName, fragmentName string, model CostumeItemPageModel) error {
 	if h.pages == nil {
@@ -568,6 +797,21 @@ func (h *CostumeItemHandler) storageError(operation string, err error) error {
 		status, message = http.StatusConflict, "That record is archived."
 	}
 	return &Error{Status: status, Message: message, Err: fmt.Errorf("%s: %w", operation, err)}
+}
+
+func (h *CostumeItemHandler) photoError(operation string, err error) error {
+	status, message := http.StatusInternalServerError, "Unable to load costume item photos."
+	if strings.HasPrefix(operation, "upload") {
+		message = "Unable to save the costume item photo."
+	}
+	if errors.Is(err, storage.ErrNotFound) {
+		status, message = http.StatusNotFound, "That costume item photo was not found."
+	}
+	return &Error{Status: status, Message: message, Err: fmt.Errorf("%s: %w", operation, err)}
+}
+
+func photoServiceUnavailable() error {
+	return &Error{Status: http.StatusInternalServerError, Message: "Costume item photos are unavailable.", Err: errors.New("web: photo service is required")}
 }
 func costumeItemNotFound() error {
 	return &Error{Status: http.StatusNotFound, Message: "Costume item not found.", Err: storage.ErrNotFound}
@@ -649,6 +893,41 @@ func costumeItemID(r *http.Request) (int64, error) {
 		return id, nil
 	}
 	return 0, &Error{Status: http.StatusBadRequest, Message: "A costume item is required.", Err: errors.New("web: missing item id")}
+}
+
+func costumeItemPhotoID(r *http.Request) (int64, error) {
+	values := []string{r.PathValue("photo")}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	for i, part := range parts {
+		if part == "photos" && i+1 < len(parts) {
+			values = append(values, parts[i+1])
+			break
+		}
+	}
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		id, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || id <= 0 {
+			return 0, &Error{Status: http.StatusBadRequest, Message: "Choose a valid photo.", Err: fmt.Errorf("web: invalid photo id %q", value)}
+		}
+		return id, nil
+	}
+	return 0, &Error{Status: http.StatusBadRequest, Message: "A photo is required.", Err: errors.New("web: missing photo id")}
+}
+
+func costumeItemPhotoVariant(r *http.Request) string {
+	if variant := r.PathValue("variant"); variant != "" {
+		return variant
+	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	for i, part := range parts {
+		if part == "photos" && i+2 < len(parts) {
+			return parts[i+2]
+		}
+	}
+	return ""
 }
 func costumeItemScopeIDs(r *http.Request) (int64, int64, error) {
 	p, err := costumeProductionID(r)

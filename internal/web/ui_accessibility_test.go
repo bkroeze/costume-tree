@@ -10,7 +10,7 @@ import (
 )
 
 func TestAccessibleInteractionScaffold(t *testing.T) {
-	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), Dependencies{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

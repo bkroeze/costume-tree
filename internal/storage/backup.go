@@ -24,6 +24,7 @@ var requiredTables = map[string][]string{
 	"item_types":                {"id", "production_id", "name", "archived_at", "created_at", "updated_at"},
 	"production_item_sequences": {"production_id", "next_value"},
 	"costume_items":             {"id", "production_id", "actor_id", "item_type_id", "code", "description", "status", "progress", "next_action", "blocker", "notes", "archived_at", "created_at", "updated_at"},
+	"costume_item_photos":       {"id", "production_id", "costume_item_id", "original_name", "display_name", "thumbnail_name", "media_type", "status", "error_message", "created_at", "updated_at"},
 }
 
 var requiredIndexes = []string{
@@ -36,6 +37,8 @@ var requiredIndexes = []string{
 	"idx_costume_items_type_active",
 	"idx_costume_items_status_active",
 	"idx_costume_items_code",
+	"idx_costume_item_photos_item",
+	"idx_costume_item_photos_pending",
 }
 
 type sqlQueryer interface {

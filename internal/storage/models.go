@@ -19,6 +19,14 @@ var (
 	ErrArchived = errors.New("storage: record is archived")
 )
 
+const (
+	PhotoStatusPending = "pending"
+	PhotoStatusReady   = "ready"
+	PhotoStatusFailed  = "failed"
+)
+
+var ErrInvalidPhotoStatus = errors.New("storage: invalid photo status")
+
 type Production struct {
 	ID         int64
 	Name       string
@@ -171,4 +179,39 @@ type CostumeItemRepository interface {
 	Update(context.Context, UpdateCostumeItemInput) (CostumeItem, error)
 	Archive(context.Context, int64, int64) error
 	AllocateCode(context.Context, int64) (string, error)
+}
+
+type CostumeItemPhoto struct {
+	ID            int64
+	ProductionID  int64
+	CostumeItemID int64
+	OriginalName  string
+	DisplayName   string
+	ThumbnailName string
+	MediaType     string
+	Status        string
+	ErrorMessage  string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type CreateCostumeItemPhotoInput struct {
+	ProductionID  int64
+	CostumeItemID int64
+	OriginalName  string
+	DisplayName   string
+	ThumbnailName string
+	MediaType     string
+}
+
+// CostumeItemPhotoRepository stores photo metadata. Web-facing reads require
+// both production and costume-item scope; worker transitions use opaque photo
+// IDs, and ListPending supports recovery of unfinished work after a restart.
+type CostumeItemPhotoRepository interface {
+	Create(context.Context, CreateCostumeItemPhotoInput) (CostumeItemPhoto, error)
+	Get(context.Context, int64, int64, int64) (CostumeItemPhoto, error)
+	List(context.Context, int64, int64) ([]CostumeItemPhoto, error)
+	ListPending(context.Context, int) ([]CostumeItemPhoto, error)
+	MarkReady(context.Context, int64) (CostumeItemPhoto, error)
+	MarkFailed(context.Context, int64, string) (CostumeItemPhoto, error)
 }

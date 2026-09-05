@@ -28,6 +28,12 @@ type Readiness interface {
 	Ready(context.Context) error
 }
 
+// Dependencies are the application services used by the web layer.
+type Dependencies struct {
+	Readiness Readiness
+	Photos    PhotoService
+}
+
 // Error describes an HTTP failure while retaining its internal cause.
 type Error struct {
 	Status  int
@@ -53,15 +59,11 @@ type pageModel struct {
 	Demo  demoState
 }
 
-// New constructs the application HTTP handler from embedded content.
-// A readiness dependency may be supplied by the composition root. Omitting it
-// preserves the no-database scaffold and reports the process as healthy.
-func New(logger *slog.Logger, readiness ...Readiness) (http.Handler, error) {
+// New constructs the application HTTP handler from embedded content and its
+// explicit application dependencies.
+func New(logger *slog.Logger, dependencies Dependencies) (http.Handler, error) {
 	if logger == nil {
 		return nil, errors.New("web: logger is required")
-	}
-	if len(readiness) > 1 {
-		return nil, errors.New("web: only one readiness dependency is supported")
 	}
 
 	pages, err := template.ParseFS(content, "templates/*.html")
@@ -73,24 +75,21 @@ func New(logger *slog.Logger, readiness ...Readiness) (http.Handler, error) {
 		return nil, fmt.Errorf("web: open embedded assets: %w", err)
 	}
 
-	server := &server{logger: logger, pages: pages}
-	if len(readiness) == 1 {
-		server.readiness = readiness[0]
-	}
+	server := &server{logger: logger, pages: pages, readiness: dependencies.Readiness}
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /assets/", cacheAssets(http.StripPrefix("/assets/", http.FileServer(http.FS(assets)))))
 	mux.Handle("POST /demo", server.handle("demo", server.demo))
 	mux.HandleFunc("GET /healthz", server.health)
 
-	if database, ok := readinessDatabase(readiness); ok {
+	if database, ok := readinessDatabase(dependencies.Readiness); ok {
 		productions := storage.NewProductionRepository(database)
 		actors := storage.NewActorRepository(database)
 		itemTypes := storage.NewItemTypeRepository(database)
 		costumeItems := storage.NewCostumeItemRepository(database)
 		actorHandler := NewActorHandler(productions, actors, pages, itemTypes)
 		itemTypeHandler := NewItemTypeHandler(productions, itemTypes, pages)
-		costumeItemHandler := NewCostumeItemHandler(productions, actors, itemTypes, costumeItems, pages)
+		costumeItemHandler := NewCostumeItemHandler(productions, actors, itemTypes, costumeItems, pages, dependencies.Photos)
 		dashboardHandler := NewDashboardHandler(productions, actors, costumeItems, storage.NewDashboardQueries(database), pages)
 		searchHandler := NewItemSearchHandler(productions, storage.NewItemSearchRepository(database), pages)
 		summaryHandler := NewItemTypeSummaryHandler(productions, storage.NewItemTypeSummaryRepository(database), pages)
@@ -126,17 +125,16 @@ func New(logger *slog.Logger, readiness ...Readiness) (http.Handler, error) {
 		mux.Handle("GET /production/{production}/actors/{actor}/items/{item}/edit", server.handle("costume-item-edit", costumeItemHandler.EditCostumeItem))
 		mux.Handle("POST /production/{production}/actors/{actor}/items/{item}/edit", server.handle("costume-item-update", costumeItemHandler.EditCostumeItem))
 		mux.Handle("POST /production/{production}/actors/{actor}/items/{item}/archive", server.handle("costume-item-archive", costumeItemHandler.ArchiveCostumeItem))
+		mux.Handle("GET /production/{production}/actors/{actor}/items/{item}/photos", server.handle("costume-item-photo-gallery", costumeItemHandler.CostumeItemPhotoGallery))
+		mux.Handle("GET /production/{production}/actors/{actor}/items/{item}/photos/{photo}/{variant}", server.handle("costume-item-photo", costumeItemHandler.ServeCostumeItemPhoto))
 	} else {
 		mux.Handle("GET /{$}", server.handle("home", server.home))
 	}
 	return mux, nil
 }
 
-func readinessDatabase(readiness []Readiness) (*storage.DB, bool) {
-	if len(readiness) != 1 {
-		return nil, false
-	}
-	database, ok := readiness[0].(*storage.DB)
+func readinessDatabase(readiness Readiness) (*storage.DB, bool) {
+	database, ok := readiness.(*storage.DB)
 	return database, ok && database != nil
 }
 

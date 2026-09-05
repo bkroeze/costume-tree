@@ -3,6 +3,7 @@ set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 image := env_var_or_default("IMAGE", "costume-tree:dev")
 container := env_var_or_default("CONTAINER", "costume-tree")
 volume := env_var_or_default("VOLUME", "costume-tree-data")
+photo_volume := env_var_or_default("PHOTO_VOLUME", "costume-tree-photos")
 port := env_var_or_default("PORT", "8080")
 
 # Show the available project commands.
@@ -36,17 +37,31 @@ build:
 image:
     docker build --tag {{image}} .
 
-# Create the persistent volume and start a foreground container.
+# Build and start the Compose service in the background.
+compose-start:
+    docker compose up --build --detach
+
+# Stop the Compose service while preserving its named database volume.
+compose-stop:
+    docker compose down
+
+# Follow Compose service logs.
+compose-logs:
+    docker compose logs --follow costume-tree
+
+# Create the persistent database and photo volumes, then start a foreground container.
 up: image
     @docker volume create {{volume}} >/dev/null
+    @docker volume create {{photo_volume}} >/dev/null
     @docker rm --force {{container}} >/dev/null 2>&1 || true
-    docker run --rm --name {{container}} --publish {{port}}:8080 --volume {{volume}}:/data {{image}}
+    docker run --rm --name {{container}} --publish {{port}}:8080 --env COSTUMETREE_DIR=/photos --volume {{volume}}:/data --volume {{photo_volume}}:/photos {{image}}
 
-# Start a detached container for local management recipes.
+# Start a detached container with persistent database and photo volumes.
 start: image
     @docker volume create {{volume}} >/dev/null
+    @docker volume create {{photo_volume}} >/dev/null
     @docker rm --force {{container}} >/dev/null 2>&1 || true
-    docker run --detach --name {{container}} --publish {{port}}:8080 --volume {{volume}}:/data {{image}}
+    docker run --detach --name {{container}} --publish {{port}}:8080 --env COSTUMETREE_DIR=/photos --volume {{volume}}:/data --volume {{photo_volume}}:/photos {{image}}
 
 # Stop and remove the managed container; data remains in VOLUME.
 stop:
@@ -78,8 +93,9 @@ restore backup destination="restored.db" restore_volume="costume-tree-restore":
     docker run --rm --user 0 --entrypoint /bin/sh --volume "$(pwd)/{{backup}}:/source/backup.db:ro" --volume {{restore_volume}}:/data {{image}} -c "cp /source/backup.db /data/.restore-input.db && chown 65532:65532 /data/.restore-input.db && /costume-tree restore /data/.restore-input.db /data/{{destination}} && rm -f /data/.restore-input.db"
     @printf 'restored: volume=%s path=/data/%s\n' '{{restore_volume}}' '{{destination}}'
 
-# Remove the managed container and its persistent volume.
+# Remove the managed container and its persistent volumes.
 clean:
     @docker stop {{container}} >/dev/null 2>&1 || true
     @docker rm {{container}} >/dev/null 2>&1 || true
     @docker volume rm {{volume}} >/dev/null 2>&1 || true
+    @docker volume rm {{photo_volume}} >/dev/null 2>&1 || true

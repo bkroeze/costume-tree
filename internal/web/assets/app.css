@@ -1166,3 +1166,129 @@ details > summary:focus-visible {
     width: 100%;
   }
 }
+
+.photo-input {
+  width: 100%;
+  padding: 0.65rem;
+  background: var(--surface);
+}
+
+.photo-input::file-selector-button {
+  min-height: 44px;
+  margin-right: 0.75rem;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-small);
+  padding: 0.5rem 0.75rem;
+  background: var(--cobalt);
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.costume-item-photo-gallery {
+  margin-top: 1.5rem;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-small);
+  padding: 1.25rem;
+  background: var(--surface);
+  box-shadow: var(--shadow-small);
+}
+
+.costume-item-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.costume-item-photo {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.65rem;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-small);
+  padding: 0.75rem;
+  background: var(--surface-muted);
+}
+
+.costume-item-photo__link {
+  display: block;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+}
+
+.costume-item-photo__link img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+.costume-item-photo__original {
+  align-self: flex-start;
+  font-weight: 800;
+}
+
+.costume-item-photo--pending,
+.costume-item-photo--failed {
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.costume-item-photo--failed {
+  border-color: var(--coral);
+  background: var(--coral-soft);
+}
+
+.costume-item-photo__processing {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  border: 3px dashed var(--cobalt);
+  border-radius: 50%;
+}
+
+.costume-item-photo__processing span {
+  width: 28px;
+  height: 28px;
+  border: 5px solid #cbd8fa;
+  border-top-color: var(--cobalt);
+  border-radius: 50%;
+  animation: costume-photo-spin 1s linear infinite;
+}
+
+@keyframes costume-photo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 680px) {
+  .costume-item-photo-gallery {
+    margin-inline: -0.25rem;
+    padding: 0.9rem;
+  }
+
+  .costume-item-photo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .costume-item-photo {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .costume-item-photo__processing span {
+    animation: none;
+  }
+}

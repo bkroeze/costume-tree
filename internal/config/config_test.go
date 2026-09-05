@@ -17,14 +17,17 @@ func TestLoadDefaultsAndOverrides(t *testing.T) {
 		if settings.DatabasePath != "/data/costume-tree.db" {
 			t.Errorf("DatabasePath = %q, want /data/costume-tree.db", settings.DatabasePath)
 		}
+		if settings.CostumeTreeDir != "." {
+			t.Errorf("CostumeTreeDir = %q, want .", settings.CostumeTreeDir)
+		}
 		if settings.ShutdownTimeout != 10*time.Second {
 			t.Errorf("ShutdownTimeout = %v, want 10s", settings.ShutdownTimeout)
 		}
 		if settings.RequestTimeout != 30*time.Second {
 			t.Errorf("RequestTimeout = %v, want 30s", settings.RequestTimeout)
 		}
-		if settings.MaxBodyBytes != 1<<20 {
-			t.Errorf("MaxBodyBytes = %d, want 1 MiB", settings.MaxBodyBytes)
+		if settings.MaxBodyBytes != 24<<20 {
+			t.Errorf("MaxBodyBytes = %d, want 24 MiB", settings.MaxBodyBytes)
 		}
 	})
 
@@ -32,6 +35,7 @@ func TestLoadDefaultsAndOverrides(t *testing.T) {
 		values := map[string]string{
 			"COSTUME_TREE_ADDR":             "127.0.0.1:9090",
 			"COSTUME_TREE_DB_PATH":          "/data/test.db",
+			"COSTUMETREE_DIR":               "/srv/photos/../costume-tree/",
 			"COSTUME_TREE_SHUTDOWN_TIMEOUT": "3s",
 			"COSTUME_TREE_REQUEST_TIMEOUT":  "7s",
 			"COSTUME_TREE_MAX_BODY_BYTES":   "2048",
@@ -48,6 +52,9 @@ func TestLoadDefaultsAndOverrides(t *testing.T) {
 		}
 		if settings.DatabasePath != "/data/test.db" {
 			t.Errorf("DatabasePath = %q, want /data/test.db", settings.DatabasePath)
+		}
+		if settings.CostumeTreeDir != "/srv/costume-tree" {
+			t.Errorf("CostumeTreeDir = %q, want /srv/costume-tree", settings.CostumeTreeDir)
 		}
 		if settings.ShutdownTimeout != 3*time.Second {
 			t.Errorf("ShutdownTimeout = %v, want 3s", settings.ShutdownTimeout)
@@ -74,6 +81,18 @@ func TestLoadRejectsDatabasePathOutsideData(t *testing.T) {
 				t.Fatalf("Load() with path %q returned nil error", path)
 			}
 		})
+	}
+}
+
+func TestLoadRejectsEmptyCostumeTreeDir(t *testing.T) {
+	_, err := Load(func(key string) (string, bool) {
+		if key == "COSTUMETREE_DIR" {
+			return "", true
+		}
+		return "", false
+	})
+	if err == nil {
+		t.Fatal("Load() error = nil, want empty COSTUMETREE_DIR error")
 	}
 }
 

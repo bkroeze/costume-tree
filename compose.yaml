@@ -1,0 +1,21 @@
+services:
+  costume-tree:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: "65532:65532"
+    environment:
+      COSTUMETREE_DIR: /photos
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - type: volume
+        source: costume-tree-data
+        target: /data
+      - type: bind
+        source: "${COSTUMETREE_DIR:-./costume-tree-photos}"
+        target: /photos
+
+volumes:
+  costume-tree-data:
+    name: costume-tree-data

@@ -13,6 +13,7 @@ import (
 
 	"costume-tree/internal/application"
 	"costume-tree/internal/config"
+	"costume-tree/internal/photos"
 	"costume-tree/internal/storage"
 	"costume-tree/internal/web"
 )
@@ -58,7 +59,21 @@ func run(logger *slog.Logger) (runErr error) {
 		return fmt.Errorf("database readiness validation failed: %w", err)
 	}
 
-	handler, err := web.New(logger, database)
+	photoService, err := photos.New(settings.CostumeTreeDir, storage.NewCostumeItemPhotoRepository(database), logger)
+	if err != nil {
+		return fmt.Errorf("initialize photo service: %w", err)
+	}
+	photoContext, cancelPhotos := context.WithCancel(context.Background())
+	if err := photoService.Start(photoContext); err != nil {
+		cancelPhotos()
+		return fmt.Errorf("start photo service: %w", err)
+	}
+	defer func() {
+		cancelPhotos()
+		photoService.Close()
+	}()
+
+	handler, err := web.New(logger, web.Dependencies{Readiness: database, Photos: photoService})
 	if err != nil {
 		return err
 	}

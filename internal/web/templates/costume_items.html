@@ -26,7 +26,7 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{.Title}}</title><link rel="stylesheet" href="/assets/app.css"><script src="/assets/htmx.min.js" defer></script></head>
 <body><header class="site-header"><div class="site-header__inner"><a class="brand" href="/" aria-label="Costume Tree home"><span class="brand-mark" aria-hidden="true">CT</span><span class="brand-copy"><span>Costume Tree</span><small>Wardrobe operations</small></span></a><span class="badge">{{.Production.Name}}</span></div></header>
-<main class="page-shell" id="costume-item-page"><p class="eyebrow">Production / item</p><div id="costume-item-detail">{{if .Form.Editing}}{{template "costume-item-form" .}}{{else}}{{template "costume-item-detail" .}}{{end}}</div></main><footer class="site-footer">Costume Tree / backstage clarity, one piece at a time.</footer></body>
+<main class="page-shell" id="costume-item-page"><p class="eyebrow">Production / item</p><div id="costume-item-detail">{{if .Form.Editing}}{{template "costume-item-edit" .}}{{else}}{{template "costume-item-detail" .}}{{end}}</div></main><footer class="site-footer">Costume Tree / backstage clarity, one piece at a time.</footer></body>
 </html>
 {{- end}}
 
@@ -43,7 +43,7 @@
 {{- end}}
 
 {{define "costume-item-form" -}}
-<form class="form-card" action="{{if .Form.Editing}}/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items/{{.Form.ID}}/edit{{else}}/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items{{end}}" method="post" hx-indicator="closest form" hx-disabled-elt="button[type='submit']" {{if .Form.Editing}}hx-post="/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items/{{.Form.ID}}/edit" hx-target="#costume-item-detail" hx-swap="innerHTML"{{else}}hx-post="/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items" hx-target="#costume-items-list" hx-swap="innerHTML"{{end}}>
+<form class="form-card" action="{{if .Form.Editing}}/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items/{{.Form.ID}}/edit{{else}}/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items{{end}}" method="post" enctype="multipart/form-data" hx-encoding="multipart/form-data" hx-indicator="closest form" hx-disabled-elt="button[type='submit']" {{if .Form.Editing}}hx-post="/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items/{{.Form.ID}}/edit" hx-target="#costume-item-detail" hx-swap="innerHTML"{{else}}hx-post="/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items" hx-target="#costume-items-list" hx-swap="innerHTML"{{end}}>
   {{if .Error}}<p id="costume-item-form-error" class="form-feedback form-feedback--error" role="alert">{{.Error}}</p>{{end}}
   {{if .Form.Errors}}<div id="costume-item-field-errors" class="form-feedback form-feedback--error" role="alert" aria-atomic="true"><p>Check the highlighted fields.</p><ul>{{range $field, $message := .Form.Errors}}<li>{{$field}}: {{$message}}</li>{{end}}</ul></div>{{end}}
   {{if .Form.Warning}}<p id="costume-item-form-warning" class="form-feedback form-feedback--error" role="alert">{{.Form.Warning}}</p>{{end}}
@@ -54,10 +54,31 @@
   <div class="field-stack"><label for="costume-item-next-action">Next action</label><input class="input-brutal" id="costume-item-next-action" name="next_action" type="text" maxlength="200" value="{{.Form.NextAction}}" placeholder="What happens next?"></div>
   <div class="field-stack"><label for="costume-item-blocker">Blocker</label><input class="input-brutal" id="costume-item-blocker" name="blocker" type="text" maxlength="200" value="{{.Form.Blocker}}" placeholder="Optional blocker"></div>
   <div class="field-stack"><label for="costume-item-notes">Notes</label><textarea class="input-brutal" id="costume-item-notes" name="notes" rows="3">{{.Form.Notes}}</textarea></div>
+  <div class="field-stack"><label for="costume-item-photo">Photo (optional)</label><input class="input-brutal photo-input" id="costume-item-photo" name="photo" type="file" accept="image/jpeg,image/png,image/gif" capture="environment"{{if index .Form.Errors "photo"}} aria-invalid="true" aria-describedby="costume-item-photo-error"{{end}}>{{if index .Form.Errors "photo"}}<small id="costume-item-photo-error" class="form-feedback--error" role="alert">{{index .Form.Errors "photo"}}</small>{{end}}</div>
   <div class="form-actions"><button class="btn-brutal btn-cobalt" type="submit">{{if .Form.Editing}}Save costume item{{else}}Create costume item{{end}}</button></div>
 </form>
 {{- end}}
 
+{{define "costume-item-edit" -}}
+{{template "costume-item-form" .}}
+{{template "costume-item-photo-gallery" .}}
+{{- end}}
+
 {{define "costume-item-detail" -}}
+{{if .Error}}<p class="form-feedback form-feedback--error" role="alert">{{.Error}}</p>{{end}}
 <article class="form-card" aria-labelledby="costume-item-detail-title">{{if .Item}}<div class="section-heading"><div><p class="section-kicker">Physical piece</p><h1 id="costume-item-detail-title"><button class="input-brutal" type="button" aria-label="Copy costume item code" onclick="navigator.clipboard&&navigator.clipboard.writeText('{{.Item.Code}}')">{{.Item.Code}}</button></h1><p><strong>Actor:</strong> {{.Actor.Name}} &middot; <strong>Type:</strong> {{.Item.ItemType}}</p></div><span class="badge">{{.Item.Status}}</span></div><dl class="costume-item-detail-grid"><div class="costume-item-detail-field"><dt>Description</dt><dd>{{if .Item.Description}}{{.Item.Description}}{{else}}<span class="empty-state">No description</span>{{end}}</dd></div><div class="costume-item-detail-field"><dt>Progress</dt><dd>{{.Item.Progress}}%</dd></div><div class="costume-item-detail-field"><dt>Next action</dt><dd>{{if .Item.NextAction}}{{.Item.NextAction}}{{else}}<span class="empty-state">No next action</span>{{end}}</dd></div><div class="costume-item-detail-field"><dt>Blocker</dt><dd>{{if .Item.Blocker}}{{.Item.Blocker}}{{else}}<span class="empty-state">None</span>{{end}}</dd></div><div class="costume-item-detail-field"><dt>Notes</dt><dd>{{if .Item.Notes}}{{.Item.Notes}}{{else}}<span class="empty-state">No notes</span>{{end}}</dd></div><div class="costume-item-detail-field"><dt>Archive state</dt><dd>{{if .Item.Archived}}Archived{{else}}Active{{end}}</dd></div></dl>{{if .Item.Warning}}<p class="form-feedback form-feedback--error" role="alert">{{.Item.Warning}}</p>{{end}}{{if not .Item.Archived}}<p class="form-actions"><a class="btn-brutal btn-cobalt" href="/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items/{{.Item.ID}}/edit">Edit item</a><form action="/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items/{{.Item.ID}}/archive" method="post"><button class="btn-brutal btn-white" type="submit">Archive item</button></form></p>{{end}}{{else}}<p class="empty-state">Costume item not found.</p>{{end}}</article>
+{{template "costume-item-photo-gallery" .}}
+{{- end}}
+
+{{define "costume-item-photo-gallery" -}}
+{{if .Item}}<section id="costume-item-photo-gallery" class="costume-item-photo-gallery" aria-labelledby="costume-item-photo-gallery-title" aria-live="polite"{{if .HasPending}} hx-get="/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items/{{.Item.ID}}/photos" hx-trigger="every 1s" hx-swap="outerHTML"{{end}}>
+  <div class="section-heading"><div><p class="section-kicker">Reference images</p><h2 id="costume-item-photo-gallery-title">Photos</h2></div></div>
+  {{if .Photos}}<ul class="costume-item-photo-grid">
+    {{range .Photos}}<li class="costume-item-photo costume-item-photo--{{.Status}}">
+      {{if eq .Status "ready"}}<a class="costume-item-photo__link" href="{{.DisplayURL}}"><img src="{{.ThumbnailURL}}" alt="Costume item photo for {{$.Item.Code}}" loading="lazy" width="320" height="320"></a><a class="costume-item-photo__original" href="{{.OriginalURL}}">View original photo</a>
+      {{else if eq .Status "pending"}}<div class="costume-item-photo__processing" role="img" aria-label="Photo processing"><span aria-hidden="true"></span></div><p><strong>Processing photo.</strong> This gallery updates automatically; reloading the page also checks again.</p>
+      {{else}}<p role="status"><strong>Photo processing failed.</strong> Choose the photo again in Edit item to retry.</p>{{end}}
+    </li>{{end}}
+  </ul>{{else}}<p class="empty-state">No photos for this costume item yet.</p>{{end}}
+</section>{{end}}
 {{- end}}

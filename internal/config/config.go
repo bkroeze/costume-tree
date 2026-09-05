@@ -1,8 +1,8 @@
 // Package config loads process settings from the environment.
 // COSTUME_TREE_ADDR defaults to :8080, COSTUME_TREE_DB_PATH defaults to
-// /data/costume-tree.db, COSTUME_TREE_SHUTDOWN_TIMEOUT defaults to 10s,
-// COSTUME_TREE_REQUEST_TIMEOUT defaults to 30s, and
-// COSTUME_TREE_MAX_BODY_BYTES defaults to 1 MiB.
+// /data/costume-tree.db, COSTUMETREE_DIR defaults to ., COSTUME_TREE_SHUTDOWN_TIMEOUT
+// defaults to 10s, COSTUME_TREE_REQUEST_TIMEOUT defaults to 30s, and
+// COSTUME_TREE_MAX_BODY_BYTES defaults to 24 MiB.
 package config
 
 import (
@@ -16,9 +16,10 @@ import (
 const (
 	defaultAddress         = ":8080"
 	defaultDatabasePath    = "/data/costume-tree.db"
+	defaultCostumeTreeDir  = "."
 	defaultShutdownTimeout = 10 * time.Second
 	defaultRequestTimeout  = 30 * time.Second
-	defaultMaxBodyBytes    = 1 << 20
+	defaultMaxBodyBytes    = 24 << 20
 	maxConfiguredBodyBytes = 64 << 20
 )
 
@@ -26,6 +27,7 @@ const (
 type Settings struct {
 	Address         string
 	DatabasePath    string
+	CostumeTreeDir  string
 	ShutdownTimeout time.Duration
 	RequestTimeout  time.Duration
 	MaxBodyBytes    int64
@@ -36,6 +38,7 @@ func Load(lookup func(string) (string, bool)) (Settings, error) {
 	settings := Settings{
 		Address:         defaultAddress,
 		DatabasePath:    defaultDatabasePath,
+		CostumeTreeDir:  defaultCostumeTreeDir,
 		ShutdownTimeout: defaultShutdownTimeout,
 		RequestTimeout:  defaultRequestTimeout,
 		MaxBodyBytes:    defaultMaxBodyBytes,
@@ -53,6 +56,13 @@ func Load(lookup func(string) (string, bool)) (Settings, error) {
 	}
 	if err := validateDatabasePath(settings.DatabasePath); err != nil {
 		return Settings{}, err
+	}
+
+	if value, ok := lookup("COSTUMETREE_DIR"); ok {
+		if value == "" {
+			return Settings{}, fmt.Errorf("config: COSTUMETREE_DIR must not be empty")
+		}
+		settings.CostumeTreeDir = filepath.Clean(value)
 	}
 
 	if value, ok := lookup("COSTUME_TREE_SHUTDOWN_TIMEOUT"); ok {

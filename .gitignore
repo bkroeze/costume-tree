@@ -1,4 +1,5 @@
 .kata.local.toml
 /bin/
-photos/
+/photos/
+/costume-tree-photos/
 costume-tree

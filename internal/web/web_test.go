@@ -20,7 +20,7 @@ func (s readinessStub) Ready(context.Context) error {
 }
 
 func TestHandlerServesHomeAndEmbeddedAsset(t *testing.T) {
-	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), Dependencies{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -62,7 +62,7 @@ func TestHealthzReflectsDatabaseReadiness(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	t.Run("ready", func(t *testing.T) {
-		handler, err := New(logger, readinessStub{})
+		handler, err := New(logger, Dependencies{Readiness: readinessStub{}})
 		if err != nil {
 			t.Fatalf("New() error = %v", err)
 		}
@@ -80,7 +80,7 @@ func TestHealthzReflectsDatabaseReadiness(t *testing.T) {
 	})
 
 	t.Run("unavailable", func(t *testing.T) {
-		handler, err := New(logger, readinessStub{err: errors.New("database unavailable")})
+		handler, err := New(logger, Dependencies{Readiness: readinessStub{err: errors.New("database unavailable")}})
 		if err != nil {
 			t.Fatalf("New() error = %v", err)
 		}
@@ -99,7 +99,7 @@ func TestHealthzReflectsDatabaseReadiness(t *testing.T) {
 }
 
 func TestDemoFormSupportsFullPageAndHTMXResponses(t *testing.T) {
-	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), Dependencies{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -146,7 +146,7 @@ func TestDemoFormSupportsFullPageAndHTMXResponses(t *testing.T) {
 }
 
 func TestVendorAssetsAreEmbedded(t *testing.T) {
-	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), Dependencies{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
