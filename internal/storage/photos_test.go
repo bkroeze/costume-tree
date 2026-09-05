@@ -81,6 +81,59 @@ func TestPhotoRepositoryScopesReadsAndOrdersLists(t *testing.T) {
 	}
 }
 
+func TestPhotoRepositoryListsFirstReadyPhotoPerActorItem(t *testing.T) {
+	db, ctx := openTestDB(t)
+	production, firstItem := createPhotoTestItem(t, ctx, db, "Inventory thumbnails")
+	actors := NewActorRepository(db)
+	types := NewItemTypeRepository(db)
+	items := NewCostumeItemRepository(db)
+	secondActor, err := actors.Create(ctx, CreateActorInput{ProductionID: production.ID, Name: "Second actor"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	itemType, err := types.Create(ctx, CreateItemTypeInput{ProductionID: production.ID, Name: "Hat"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondItem, err := items.Create(ctx, CreateCostumeItemInput{ProductionID: production.ID, ActorID: secondActor.ID, ItemTypeID: itemType.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	photos := NewCostumeItemPhotoRepository(db)
+	first, err := photos.Create(ctx, validPhotoInput(production.ID, firstItem.ID, "first"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := photos.MarkReady(ctx, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	later, err := photos.Create(ctx, validPhotoInput(production.ID, firstItem.ID, "later"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := photos.MarkReady(ctx, later.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := photos.Create(ctx, validPhotoInput(production.ID, firstItem.ID, "pending")); err != nil {
+		t.Fatal(err)
+	}
+	otherActorPhoto, err := photos.Create(ctx, validPhotoInput(production.ID, secondItem.ID, "other-actor"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := photos.MarkReady(ctx, otherActorPhoto.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	listed, err := photos.ListFirstReadyByActor(ctx, production.ID, firstItem.ActorID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].ID != first.ID {
+		t.Fatalf("first ready photos = %#v, want only photo %d", listed, first.ID)
+	}
+}
+
 func TestPhotoRepositoryTransitionsPendingRows(t *testing.T) {
 	db, ctx := openTestDB(t)
 	production, item := createPhotoTestItem(t, ctx, db, "Transitions")

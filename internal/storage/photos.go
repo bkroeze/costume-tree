@@ -194,6 +194,33 @@ func (r *costumeItemPhotoRepository) List(ctx context.Context, productionID, cos
 	)
 }
 
+func (r *costumeItemPhotoRepository) ListFirstReadyByActor(ctx context.Context, productionID, actorID int64) ([]CostumeItemPhoto, error) {
+	db, err := r.database()
+	if err != nil {
+		return nil, err
+	}
+	return listCostumeItemPhotos(ctx, db,
+		`SELECT p.id, p.production_id, p.costume_item_id, p.original_name,
+		        p.display_name, p.thumbnail_name, p.media_type, p.status,
+		        p.error_message, p.created_at, p.updated_at
+		 FROM costume_item_photos AS p
+		 JOIN costume_items AS i
+		   ON i.production_id = p.production_id AND i.id = p.costume_item_id
+		 WHERE p.production_id = ? AND i.actor_id = ? AND p.status = 'ready'
+		   AND p.id = (
+		       SELECT candidate.id
+		       FROM costume_item_photos AS candidate
+		       WHERE candidate.production_id = p.production_id
+		         AND candidate.costume_item_id = p.costume_item_id
+		         AND candidate.status = 'ready'
+		       ORDER BY candidate.created_at, candidate.id
+		       LIMIT 1
+		   )
+		 ORDER BY p.costume_item_id`,
+		[]any{productionID, actorID}, "list first ready costume item photos by actor",
+	)
+}
+
 func (r *costumeItemPhotoRepository) ListPending(ctx context.Context, limit int) ([]CostumeItemPhoto, error) {
 	if limit <= 0 {
 		return nil, errors.New("storage: pending photo limit must be positive")

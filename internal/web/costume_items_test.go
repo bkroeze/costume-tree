@@ -68,12 +68,13 @@ type photoUploadCall struct {
 }
 
 type fakePhotoService struct {
-	validateErr error
-	uploadErr   error
-	uploads     []photoUploadCall
-	photos      []storage.CostumeItemPhoto
-	listScopes  [][2]int64
-	resolveCall struct {
+	validateErr      error
+	uploadErr        error
+	uploads          []photoUploadCall
+	photos           []storage.CostumeItemPhoto
+	listScopes       [][2]int64
+	firstReadyScopes [][2]int64
+	resolveCall      struct {
 		productionID int64
 		itemID       int64
 		photoID      int64
@@ -101,6 +102,23 @@ func (f *fakePhotoService) Upload(_ context.Context, item storage.CostumeItem, f
 func (f *fakePhotoService) List(_ context.Context, productionID, itemID int64) ([]storage.CostumeItemPhoto, error) {
 	f.listScopes = append(f.listScopes, [2]int64{productionID, itemID})
 	return f.photos, nil
+}
+
+func (f *fakePhotoService) ListFirstReadyByActor(_ context.Context, productionID, actorID int64) ([]storage.CostumeItemPhoto, error) {
+	f.firstReadyScopes = append(f.firstReadyScopes, [2]int64{productionID, actorID})
+	seen := make(map[int64]struct{})
+	var first []storage.CostumeItemPhoto
+	for _, photo := range f.photos {
+		if photo.ProductionID != productionID || photo.Status != storage.PhotoStatusReady {
+			continue
+		}
+		if _, ok := seen[photo.CostumeItemID]; ok {
+			continue
+		}
+		seen[photo.CostumeItemID] = struct{}{}
+		first = append(first, photo)
+	}
+	return first, nil
 }
 
 func (f *fakePhotoService) Resolve(_ context.Context, productionID, itemID, photoID int64, variant string) (storage.CostumeItemPhoto, string, error) {
@@ -163,6 +181,57 @@ func TestCostumeItemCreateAllocatesUniqueCodesAndAllowsDuplicates(t *testing.T) 
 	}
 	if strings.Count(list.Body.String(), "Blue cloak") != 2 {
 		t.Fatalf("duplicate descriptions not preserved: %s", list.Body.String())
+	}
+}
+
+func TestCostumeItemListShowsFirstReadyPhotoThumbnail(t *testing.T) {
+	h, production, actor, typ, ctx := costumeItemFixture(t)
+	firstItem, err := h.items.Create(ctx, storage.CreateCostumeItemInput{ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: typ.ID, Description: "First"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondItem, err := h.items.Create(ctx, storage.CreateCostumeItemInput{ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: typ.ID, Description: "Second"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	photos := &fakePhotoService{photos: []storage.CostumeItemPhoto{
+		{ID: 1, ProductionID: production.ID, CostumeItemID: firstItem.ID, Status: storage.PhotoStatusPending},
+		{ID: 2, ProductionID: production.ID, CostumeItemID: firstItem.ID, Status: storage.PhotoStatusReady},
+		{ID: 3, ProductionID: production.ID, CostumeItemID: firstItem.ID, Status: storage.PhotoStatusReady},
+		{ID: 4, ProductionID: production.ID, CostumeItemID: secondItem.ID, Status: storage.PhotoStatusReady},
+	}}
+	h.photos = photos
+	response := httptest.NewRecorder()
+	if err := h.ListCostumeItems(response, costumeItemRequest(http.MethodGet, costumeItemListPath(production.ID, actor.ID), nil)); err != nil {
+		t.Fatal(err)
+	}
+	body := response.Body.String()
+	firstThumbnail := costumeItemDetailPath(production.ID, actor.ID, firstItem.ID) + "/photos/2/thumbnail"
+	secondThumbnail := costumeItemDetailPath(production.ID, actor.ID, secondItem.ID) + "/photos/4/thumbnail"
+	for _, wanted := range []string{firstThumbnail, secondThumbnail, `alt="Thumbnail of ` + firstItem.Code + `"`} {
+		if !strings.Contains(body, wanted) {
+			t.Errorf("inventory list missing %q: %s", wanted, body)
+		}
+	}
+	if strings.Contains(body, "/photos/1/thumbnail") || strings.Contains(body, "/photos/3/thumbnail") {
+		t.Fatalf("inventory list did not choose the first ready photo: %s", body)
+	}
+	if len(photos.firstReadyScopes) != 1 || photos.firstReadyScopes[0] != [2]int64{production.ID, actor.ID} {
+		t.Fatalf("first-ready scopes = %#v", photos.firstReadyScopes)
+	}
+	photos.validateErr = errors.New("invalid photo")
+	invalid := httptest.NewRecorder()
+	values := url.Values{
+		"item_type_id": {strconv.FormatInt(typ.ID, 10)},
+		"description":  {"Invalid submission"},
+		"status":       {storage.StatusNotStarted},
+		"progress":     {"0"},
+	}
+	if err := h.CreateCostumeItem(invalid, costumeItemMultipartRequest(t, http.MethodPost, costumeItemListPath(production.ID, actor.ID), values, "invalid.jpg")); err != nil {
+		t.Fatal(err)
+	}
+	if invalid.Code != http.StatusUnprocessableEntity || !strings.Contains(invalid.Body.String(), firstThumbnail) {
+		t.Fatalf("validation response lost inventory thumbnail: %d %s", invalid.Code, invalid.Body.String())
 	}
 }
 

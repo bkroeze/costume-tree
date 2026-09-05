@@ -38,26 +38,28 @@ type PhotoService interface {
 	Validate(*multipart.FileHeader) error
 	Upload(context.Context, storage.CostumeItem, *multipart.FileHeader) (storage.CostumeItemPhoto, error)
 	List(context.Context, int64, int64) ([]storage.CostumeItemPhoto, error)
+	ListFirstReadyByActor(context.Context, int64, int64) ([]storage.CostumeItemPhoto, error)
 	Resolve(context.Context, int64, int64, int64, string) (storage.CostumeItemPhoto, string, error)
 }
 
 type CostumeItemView struct {
-	ID          int64
-	Production  int64
-	ActorID     int64
-	ActorName   string
-	ItemTypeID  int64
-	ItemType    string
-	Code        string
-	Description string
-	Status      string
-	Progress    int
-	NextAction  string
-	Blocker     string
-	Notes       string
-	Archived    bool
-	UpdatedAt   string
-	Warning     string
+	ID           int64
+	Production   int64
+	ActorID      int64
+	ActorName    string
+	ItemTypeID   int64
+	ItemType     string
+	Code         string
+	Description  string
+	Status       string
+	Progress     int
+	NextAction   string
+	Blocker      string
+	Notes        string
+	Archived     bool
+	UpdatedAt    string
+	Warning      string
+	ThumbnailURL string
 }
 
 type CostumeItemFormView struct {
@@ -153,7 +155,10 @@ func (h *CostumeItemHandler) ListCostumeItems(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		return h.storageError("list costume items", err)
 	}
-	model := h.listModel(r.Context(), production, actor, items)
+	model, err := h.listModel(r.Context(), production, actor, items)
+	if err != nil {
+		return err
+	}
 	return h.render(w, r, http.StatusOK, "costume-items-page", "costume-items-list", model)
 }
 
@@ -211,7 +216,10 @@ func (h *CostumeItemHandler) CreateCostumeItem(w http.ResponseWriter, r *http.Re
 		if listErr != nil {
 			return h.storageError("list costume items", listErr)
 		}
-		model := h.listModel(r.Context(), production, actor, items)
+		model, err := h.listModel(r.Context(), production, actor, items)
+		if err != nil {
+			return err
+		}
 		model.Success = "Created " + item.Code + "."
 		return RenderFragment(w, h.pages, "costume-items-list", http.StatusOK, model)
 	}
@@ -425,7 +433,10 @@ func (h *CostumeItemHandler) ArchiveCostumeItem(w http.ResponseWriter, r *http.R
 		if listErr != nil {
 			return h.storageError("list costume items", listErr)
 		}
-		model := h.listModel(r.Context(), production, actor, items)
+		model, err := h.listModel(r.Context(), production, actor, items)
+		if err != nil {
+			return err
+		}
 		model.Success = item.Code + " archived."
 		return RenderFragment(w, h.pages, "costume-items-list", http.StatusOK, model)
 	}
@@ -604,14 +615,38 @@ func containsStatus(status string) bool {
 	return false
 }
 
-func (h *CostumeItemHandler) listModel(ctx context.Context, production storage.Production, actor storage.Actor, items []storage.CostumeItem) CostumeItemPageModel {
+func (h *CostumeItemHandler) listModel(ctx context.Context, production storage.Production, actor storage.Actor, items []storage.CostumeItem) (CostumeItemPageModel, error) {
 	model := CostumeItemPageModel{Title: "Costume items · " + actor.Name, Production: production, Actor: actor, Statuses: costumeItemStatuses}
 	model.Actors, model.ItemTypes = h.selectors(ctx, production.ID)
 	for _, item := range items {
 		model.Items = append(model.Items, h.view(ctx, production.ID, item))
 	}
+	if err := h.addInventoryThumbnails(ctx, &model); err != nil {
+		return CostumeItemPageModel{}, err
+	}
 	model.Empty = len(model.Items) == 0
-	return model
+	return model, nil
+}
+
+func (h *CostumeItemHandler) addInventoryThumbnails(ctx context.Context, model *CostumeItemPageModel) error {
+	if h.photos == nil || len(model.Items) == 0 {
+		return nil
+	}
+	firstPhotos, err := h.photos.ListFirstReadyByActor(ctx, model.Production.ID, model.Actor.ID)
+	if err != nil {
+		return h.photoError("list inventory thumbnails", err)
+	}
+	photoByItem := make(map[int64]storage.CostumeItemPhoto, len(firstPhotos))
+	for _, photo := range firstPhotos {
+		photoByItem[photo.CostumeItemID] = photo
+	}
+	for index := range model.Items {
+		item := &model.Items[index]
+		if photo, ok := photoByItem[item.ID]; ok {
+			item.ThumbnailURL = costumeItemDetailPath(model.Production.ID, model.Actor.ID, item.ID) + "/photos/" + strconv.FormatInt(photo.ID, 10) + "/thumbnail"
+		}
+	}
+	return nil
 }
 
 func (h *CostumeItemHandler) scopedItem(ctx context.Context, productionID, actorID, itemID int64) (storage.Production, storage.Actor, storage.CostumeItem, error) {
@@ -763,6 +798,9 @@ func (h *CostumeItemHandler) renderFormError(w http.ResponseWriter, r *http.Requ
 		model.Items = make([]CostumeItemView, 0, len(items))
 		for _, item := range items {
 			model.Items = append(model.Items, h.view(r.Context(), model.Production.ID, item))
+		}
+		if err := h.addInventoryThumbnails(r.Context(), &model); err != nil {
+			return err
 		}
 		model.Empty = len(model.Items) == 0
 		return h.render(w, r, status, "costume-items-page", "costume-item-form", model)

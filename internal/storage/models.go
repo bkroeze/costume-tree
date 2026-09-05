@@ -211,6 +211,7 @@ type CostumeItemPhotoRepository interface {
 	Create(context.Context, CreateCostumeItemPhotoInput) (CostumeItemPhoto, error)
 	Get(context.Context, int64, int64, int64) (CostumeItemPhoto, error)
 	List(context.Context, int64, int64) ([]CostumeItemPhoto, error)
+	ListFirstReadyByActor(context.Context, int64, int64) ([]CostumeItemPhoto, error)
 	ListPending(context.Context, int) ([]CostumeItemPhoto, error)
 	MarkReady(context.Context, int64) (CostumeItemPhoto, error)
 	MarkFailed(context.Context, int64, string) (CostumeItemPhoto, error)

@@ -74,6 +74,24 @@ func (r *photoRepository) List(_ context.Context, productionID, itemID int64) ([
 	return result, nil
 }
 
+func (r *photoRepository) ListFirstReadyByActor(_ context.Context, productionID, _ int64) ([]storage.CostumeItemPhoto, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	seen := make(map[int64]struct{})
+	var result []storage.CostumeItemPhoto
+	for _, photo := range r.photos {
+		if photo.ProductionID != productionID || photo.Status != storage.PhotoStatusReady {
+			continue
+		}
+		if _, ok := seen[photo.CostumeItemID]; ok {
+			continue
+		}
+		seen[photo.CostumeItemID] = struct{}{}
+		result = append(result, photo)
+	}
+	return result, nil
+}
+
 func (r *photoRepository) ListPending(_ context.Context, limit int) ([]storage.CostumeItemPhoto, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

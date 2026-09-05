@@ -196,6 +196,11 @@ func (s *Service) List(ctx context.Context, productionID, itemID int64) ([]stora
 	return s.repository.List(ctx, productionID, itemID)
 }
 
+// ListFirstReadyByActor returns at most one ready photo per actor inventory item.
+func (s *Service) ListFirstReadyByActor(ctx context.Context, productionID, actorID int64) ([]storage.CostumeItemPhoto, error) {
+	return s.repository.ListFirstReadyByActor(ctx, productionID, actorID)
+}
+
 // Resolve returns a scoped regular file. Derivatives are unavailable until ready.
 func (s *Service) Resolve(ctx context.Context, productionID, itemID, photoID int64, variant string) (storage.CostumeItemPhoto, string, error) {
 	photo, err := s.repository.Get(ctx, productionID, itemID, photoID)
