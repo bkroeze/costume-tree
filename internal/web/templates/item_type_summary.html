@@ -1,0 +1,50 @@
+{{define "item-type-summary-page" -}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Production costume item status summary">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <script src="/assets/htmx.min.js" defer></script>
+</head>
+<body>
+  <header class="site-header"><div class="site-header__inner">
+    <a class="brand" href="/" aria-label="Costume Tree home"><span class="brand-mark" aria-hidden="true">CT</span><span class="brand-copy"><span>Costume Tree</span><small>Wardrobe operations</small></span></a>
+    <span class="badge">{{.Production.Name}}</span>
+  </div></header>
+  <main class="page-shell" id="item-type-summary-page">
+    <section class="page-intro" aria-labelledby="item-type-summary-title">
+      <div><p class="eyebrow">Production / overview</p><h1 id="item-type-summary-title">Production summary</h1><p class="page-intro__copy">See every active costume type at a glance, with counts that open the matching inventory.</p></div>
+    </section>
+    <div id="item-type-summary">{{template "item-type-summary" .}}</div>
+  </main>
+  <footer class="site-footer">Costume Tree / backstage clarity, one piece at a time.</footer>
+</body>
+</html>
+{{- end}}
+
+{{define "item-type-summary" -}}
+<section aria-labelledby="summary-table-title">
+  <div class="section-heading"><div><p class="section-kicker">Active inventory</p><h2 id="summary-table-title">Items by type</h2></div><p>Only active item types represented by active items are shown. Archived items and archived actors are excluded.</p></div>
+  {{if .Rows}}
+  <div class="summary-table-wrap" style="overflow-x:auto">
+    <table class="summary-table">
+      <caption class="visually-hidden">Costume item status counts by item type</caption>
+      <thead><tr><th scope="col">Item type</th><th scope="col">Total</th><th scope="col">Complete</th><th scope="col">In progress</th><th scope="col">Blocked</th><th scope="col">Ready</th><th scope="col">Not started</th></tr></thead>
+      <tbody>
+      {{range .Rows}}
+        <tr>
+          <th scope="row">{{.Name}}</th>
+          {{$row := .}}{{range .Counts}}<td>{{if .Count}}<a href="{{.URL}}" aria-label="{{.Count}} {{.Label}} {{$row.Name}} items">{{.Count}}</a>{{else}}<span aria-label="0 {{.Label}}">0</span>{{end}}</td>{{end}}
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+    <p class="empty-state" role="status">No active costume items have been added yet.</p>
+  {{end}}
+</section>
+{{- end}}

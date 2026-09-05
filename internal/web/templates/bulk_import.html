@@ -1,0 +1,70 @@
+{{define "bulk-import-page" -}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Import actors and costume items into a production">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <script src="/assets/htmx.min.js" defer></script>
+</head>
+<body>
+  <header class="site-header"><div class="site-header__inner">
+    <a class="brand" href="/" aria-label="Costume Tree home"><span class="brand-mark" aria-hidden="true">CT</span><span class="brand-copy"><span>Costume Tree</span><small>Wardrobe operations</small></span></a>
+    <span class="badge">{{.Production.Name}}</span>
+  </div></header>
+  <main class="page-shell" id="bulk-import-page">
+    <section class="page-intro" aria-labelledby="bulk-import-title">
+      <div><p class="eyebrow">Production / intake</p><h1 id="bulk-import-title">Bulk import</h1><p class="page-intro__copy">Paste an actor followed by one or more item types. Blank lines start the next actor.</p></div>
+    </section>
+    {{if .Results}}{{template "bulk-import-result" .}}{{else}}{{template "bulk-import-preview" .}}{{end}}
+  </main>
+  <footer class="site-footer">Costume Tree / backstage clarity, one piece at a time.</footer>
+</body>
+</html>
+{{- end}}
+
+{{define "bulk-import-preview" -}}
+<section class="form-section" aria-labelledby="bulk-import-form-title" id="bulk-import-content">
+  {{template "bulk-import-form" .}}
+  {{if .Preview}}{{template "bulk-import-table" .}}{{end}}
+</section>
+{{- end}}
+
+{{define "bulk-import-form" -}}
+<form class="form-card" action="/production/{{.Production.ID}}/bulk" method="post" hx-post="/production/{{.Production.ID}}/bulk" hx-target="#bulk-import-content" hx-swap="outerHTML">
+  <div class="section-heading"><div><p class="section-kicker">Paste entries</p><h2 id="bulk-import-form-title">Preview imported pieces</h2></div><p>One actor line, then item type lines, with a blank line between actors.</p></div>
+  {{if .Error}}<p class="form-feedback form-feedback--error" role="alert">{{.Error}}</p>{{end}}
+  <label class="field-stack" for="bulk-input"><span class="field-label">Actor and item types</span><textarea class="input-brutal" id="bulk-input" name="input" rows="14" required placeholder="Ada\nCloak\nHat\n\nBanquo\nSword">{{.Input}}</textarea></label>
+  <label class="field-inline"><input type="checkbox" name="allow_new_types" value="true" {{if .AllowNewTypes}}checked{{end}}> Allow new item types</label>
+  <div class="form-actions"><button class="btn-brutal btn-cobalt" type="submit" name="action" value="preview">Preview import</button></div>
+</form>
+{{- end}}
+
+{{define "bulk-import-table" -}}
+<section class="form-section" aria-labelledby="bulk-import-preview-title">
+  <div class="section-heading"><div><p class="section-kicker">Server-side preview</p><h2 id="bulk-import-preview-title">{{len .Preview.Rows}} item{{if ne (len .Preview.Rows) 1}}s{{end}} ready</h2></div><p>Names are resolved within {{.Production.Name}} without changing any records yet.</p></div>
+  <div class="table-wrap"><table class="data-table"><thead><tr><th>Source</th><th>Actor</th><th>Item type</th><th>Preview</th></tr></thead><tbody>
+  {{range .Preview.Rows}}<tr><td>line {{.ItemLine}}</td><td>{{.ActorName}} <span class="badge">{{.ActorState}}</span></td><td>{{.ItemTypeName}} <span class="badge">{{.ItemTypeState}}</span></td><td>{{if .Duplicate}}<span class="status-brutal">duplicate line (will import)</span>{{else if .Error}}<span class="form-feedback--error">{{.Error}}</span>{{else}}<span class="status-brutal">{{.Status}}</span>{{end}}</td></tr>{{end}}
+  </tbody></table></div>
+  <form class="form-actions" action="/production/{{.Production.ID}}/bulk" method="post" hx-post="/production/{{.Production.ID}}/bulk" hx-target="#bulk-import-content" hx-swap="outerHTML">
+    <input type="hidden" name="action" value="commit"><input type="hidden" name="token" value="{{.Token}}">
+    <button class="btn-brutal btn-cobalt" type="submit">Commit import</button>
+  </form>
+</section>
+{{- end}}
+
+{{define "bulk-import-result" -}}
+<section class="form-section" aria-labelledby="bulk-import-result-title" id="bulk-import-content">
+  {{if .Error}}<p class="form-feedback form-feedback--error" role="alert">{{.Error}}</p>{{end}}
+  {{if .Success}}<p class="form-feedback form-feedback--success" role="status">{{.Success}}</p>{{end}}
+  {{if .Results}}
+  <div class="section-heading"><div><p class="section-kicker">Imported pieces</p><h2 id="bulk-import-result-title">Result links</h2></div></div>
+  <ul class="item-type-list__active" aria-label="Imported costume items">
+    {{range .Results}}<li class="item-type-row"><div><a class="costume-item-code" href="{{.ItemURL}}"><strong>{{.Code}}</strong></a><span class="item-type-name">{{.ItemType}}</span><p>Actor: <a href="{{.ActorURL}}">{{if .ActorName}}{{.ActorName}}{{else}}actor {{.ActorID}}{{end}}</a></p></div></li>{{end}}
+  </ul>
+  {{end}}
+  {{if .Input}}{{template "bulk-import-form" .}}{{end}}
+</section>
+{{- end}}

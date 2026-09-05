@@ -91,6 +91,10 @@ func New(logger *slog.Logger, readiness ...Readiness) (http.Handler, error) {
 		actorHandler := NewActorHandler(productions, actors, pages, itemTypes)
 		itemTypeHandler := NewItemTypeHandler(productions, itemTypes, pages)
 		costumeItemHandler := NewCostumeItemHandler(productions, actors, itemTypes, costumeItems, pages)
+		dashboardHandler := NewDashboardHandler(productions, actors, costumeItems, storage.NewDashboardQueries(database), pages)
+		searchHandler := NewItemSearchHandler(productions, storage.NewItemSearchRepository(database), pages)
+		summaryHandler := NewItemTypeSummaryHandler(productions, storage.NewItemTypeSummaryRepository(database), pages)
+		bulkHandler := NewBulkImportHandler(productions, storage.NewBulkImporter(database), pages)
 
 		mux.Handle("GET /{$}", server.handle("production", actorHandler.Production))
 		mux.Handle("GET /production", server.handle("production", actorHandler.Production))
@@ -107,13 +111,21 @@ func New(logger *slog.Logger, readiness ...Readiness) (http.Handler, error) {
 		mux.Handle("POST /production/{production}/item-types/{id}/archive", server.handle("item-type-archive", itemTypeHandler.ArchiveItemType))
 		mux.Handle("POST /production/{production}/item-types/{id}/restore", server.handle("item-type-restore", itemTypeHandler.RestoreItemType))
 
+		mux.Handle("GET /production/{production}/dashboard", server.handle("dashboard", dashboardHandler.Dashboard))
+		mux.Handle("GET /production/{production}/workspace/{actor}", server.handle("workspace", dashboardHandler.Workspace))
+		mux.Handle("POST /production/{production}/workspace/{actor}", server.handle("workspace", dashboardHandler.Workspace))
+		mux.Handle("GET /production/{production}/summary", server.handle("summary", summaryHandler.Summary))
+		mux.Handle("GET /production/{production}/items", server.handle("item-search", searchHandler.SearchItems))
+		mux.Handle("GET /production/{production}/items/code/{code}", server.handle("costume-item-code", costumeItemHandler.LookupCostumeItem))
+		mux.Handle("GET /production/{production}/bulk", server.handle("bulk-import", bulkHandler.BulkImport))
+		mux.Handle("POST /production/{production}/bulk", server.handle("bulk-import", bulkHandler.BulkImport))
+
 		mux.Handle("GET /production/{production}/actors/{actor}/items", server.handle("costume-items", costumeItemHandler.ListCostumeItems))
 		mux.Handle("POST /production/{production}/actors/{actor}/items", server.handle("costume-item-create", costumeItemHandler.CreateCostumeItem))
 		mux.Handle("GET /production/{production}/actors/{actor}/items/{item}", server.handle("costume-item", costumeItemHandler.DetailCostumeItem))
 		mux.Handle("GET /production/{production}/actors/{actor}/items/{item}/edit", server.handle("costume-item-edit", costumeItemHandler.EditCostumeItem))
 		mux.Handle("POST /production/{production}/actors/{actor}/items/{item}/edit", server.handle("costume-item-update", costumeItemHandler.EditCostumeItem))
 		mux.Handle("POST /production/{production}/actors/{actor}/items/{item}/archive", server.handle("costume-item-archive", costumeItemHandler.ArchiveCostumeItem))
-		mux.Handle("GET /production/{production}/items/code/{code}", server.handle("costume-item-code", costumeItemHandler.LookupCostumeItem))
 	} else {
 		mux.Handle("GET /{$}", server.handle("home", server.home))
 	}
