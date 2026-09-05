@@ -15,7 +15,7 @@
     <section class="page-intro" aria-labelledby="item-search-title"><div><p class="eyebrow">Production / inventory</p><h1 id="item-search-title">Search costume items</h1><p class="page-intro__copy">Find a physical piece by code, owner, type, status, or progress.</p></div></section>
     <section class="toolbar-box" aria-labelledby="item-search-filters-title">
       <div class="toolbar-copy"><h2 id="item-search-filters-title">Filter inventory</h2><p>Results are active items in {{.Production.Name}}. Filters combine together.</p></div>
-      <form class="filter-controls" action="{{.CanonicalURL}}" method="get" hx-get="/production/{{.Production.ID}}/items" hx-target="#item-search-results" hx-swap="outerHTML" hx-push-url="true">
+      <form class="filter-controls" action="{{.CanonicalURL}}" method="get" hx-get="/production/{{.Production.ID}}/items" hx-target="#item-search-results" hx-swap="outerHTML" hx-push-url="true" hx-indicator="closest form" hx-disabled-elt="button[type='submit']" aria-controls="item-search-results">
         <label class="field-inline"><span class="field-label">Code</span><input class="input-brutal" type="search" name="code" value="{{.Filters.Code}}" placeholder="C-0001" autocomplete="off"></label>
         <label class="field-inline"><span class="field-label">Search text</span><input class="input-brutal" type="search" name="q" value="{{.Filters.Text}}" placeholder="Actor, role, type, description" autocomplete="off"></label>
         <label class="field-inline"><span class="field-label">Actor ID</span><input class="input-brutal" type="number" min="1" name="actor" value="{{if .Filters.ActorID}}{{.Filters.ActorID}}{{end}}" inputmode="numeric"></label>
@@ -36,13 +36,13 @@
 {{- end}}
 
 {{define "item-search-results" -}}
-<section id="item-search-results" aria-labelledby="item-search-results-title" aria-live="polite">
-  <div class="section-heading"><div><p class="section-kicker">Production inventory</p><h2 id="item-search-results-title">{{if .Empty}}No matching items{{else}}Matching items{{end}}</h2></div><p>{{.Count}} shown{{if .HasPrevious}} · page {{.Filters.Page}}{{end}}</p></div>
+<section id="item-search-results" aria-labelledby="item-search-results-title" aria-live="polite" aria-atomic="false" aria-relevant="additions text">
+  <div class="section-heading"><div><p class="section-kicker">Production inventory</p><h2 id="item-search-results-title">{{if .Empty}}No matching items{{else}}Matching items{{end}}</h2></div><p role="status">{{.Count}} shown{{if .HasPrevious}} · page {{.Filters.Page}}{{end}}</p></div>
   {{if .Empty}}
     <p class="empty-state">No active costume items match these filters. <a href="{{.ClearURL}}">Clear filters</a> to see the full inventory.</p>
   {{else}}
     <div class="pieces-table-wrap" tabindex="0" aria-label="Costume item results">
-      <table class="item-search-table"><thead><tr><th scope="col">Code</th><th scope="col">Actor</th><th scope="col">Type</th><th scope="col">Description</th><th scope="col">Status</th><th scope="col">Progress</th><th scope="col">Next action</th><th scope="col">Blocker</th></tr></thead>
+      <table class="item-search-table"><caption class="visually-hidden">Active costume items matching the selected filters</caption><thead><tr><th scope="col">Code</th><th scope="col">Actor</th><th scope="col">Type</th><th scope="col">Description</th><th scope="col">Status</th><th scope="col">Progress</th><th scope="col">Next action</th><th scope="col">Blocker</th></tr></thead>
       <tbody>{{range .Results}}<tr><td><a class="costume-item-code" href="/production/{{$.Production.ID}}/items/code/{{.Code}}"><strong>{{.Code}}</strong></a></td><td>{{.Actor}}{{if .Role}}<small>{{.Role}}</small>{{end}}</td><td>{{.Type}}</td><td>{{if .Description}}{{.Description}}{{else}}<span class="empty-state">No description</span>{{end}}</td><td><span class="badge">{{.Status}}</span></td><td><span role="progressbar" aria-label="{{.Code}} progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{.Progress}}">{{.Progress}}%</span></td><td>{{if .NextAction}}{{.NextAction}}{{else}}<span class="empty-state">—</span>{{end}}</td><td>{{if .Blocker}}<strong>{{.Blocker}}</strong>{{else}}<span class="empty-state">—</span>{{end}}</td></tr>{{end}}</tbody></table>
     </div>
     <nav class="form-actions" aria-label="Search result pages">{{if .HasPrevious}}<a class="btn-brutal btn-white btn-sm" href="{{.PreviousURL}}" hx-get="{{.PreviousURL}}" hx-target="#item-search-results" hx-swap="outerHTML" hx-push-url="true">Previous</a>{{end}}{{if .HasNext}}<a class="btn-brutal btn-white btn-sm" href="{{.NextURL}}" hx-get="{{.NextURL}}" hx-target="#item-search-results" hx-swap="outerHTML" hx-push-url="true">Next</a>{{end}}</nav>

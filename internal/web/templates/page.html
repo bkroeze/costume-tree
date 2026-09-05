@@ -162,8 +162,8 @@
         </div>
         <p>Large, keyboard-friendly fields keep backstage updates quick.</p>
       </div>
-      <form class="form-card" action="/demo" method="post" hx-post="/demo" hx-target="#demo-feedback" hx-swap="innerHTML">
-        <div id="demo-feedback" class="form-feedback" aria-live="polite">{{template "demo-feedback" .}}</div>
+      <form id="demo-form" class="form-card" action="/demo" method="post" hx-post="/demo" hx-target="#demo-feedback" hx-swap="innerHTML" hx-indicator="closest form" hx-disabled-elt="button[type='submit']">
+        <div id="demo-feedback" class="form-feedback" aria-live="polite" aria-atomic="true">{{template "demo-feedback" .}}</div>
         <div class="form-grid">
           <div class="field-stack">
             <label for="piece-name">Piece name</label>

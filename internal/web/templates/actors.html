@@ -36,15 +36,14 @@
 {{- end}}
 
 {{define "production-form" -}}
-<form class="form-card" action="/production" method="post" hx-post="/production" hx-target="#production-feedback" hx-swap="outerHTML">
-  <div id="production-feedback" class="form-feedback" aria-live="polite">
+<form id="production-form" class="form-card" action="/production" method="post" hx-post="/production" hx-target="closest form" hx-swap="outerHTML" hx-indicator="closest form" hx-disabled-elt="button[type='submit']">
+  <div id="production-feedback" class="form-feedback" aria-live="polite" aria-atomic="true">
     {{with index .ProductionForm.Errors "name"}}<p class="form-feedback form-feedback--error" role="alert">{{.}}</p>{{end}}
   </div>
   <div class="form-grid">
     <div class="field-stack">
       <label for="production-name">Production name</label>
-
-      <input class="input-brutal" id="production-name" name="name" type="text" value="{{.ProductionForm.Name}}" autocomplete="organization" required aria-describedby="production-name-error">
+      <input class="input-brutal" id="production-name" name="name" type="text" value="{{.ProductionForm.Name}}" autocomplete="organization" required{{with index .ProductionForm.Errors "name"}} aria-invalid="true" aria-describedby="production-name-error"{{end}}>
       {{with index .ProductionForm.Errors "name"}}<span id="production-name-error" class="form-feedback form-feedback--error" role="alert">{{.}}</span>{{end}}
     </div>
   </div>
@@ -81,7 +80,7 @@
 {{- end}}
 
 {{define "actor-list" -}}
-<div id="actor-list" class="actor-feed" aria-live="polite">
+<div id="actor-list" class="actor-feed" aria-live="polite" aria-atomic="false" aria-relevant="additions removals text">
   {{if .Empty}}<article class="form-card"><p class="form-feedback" role="status">No active actors yet. Add the first actor below.</p></article>{{else}}
     {{range .Actors}}
     <article class="actor-block">
@@ -97,9 +96,9 @@
 {{- end}}
 
 {{define "actor-form" -}}
-<form class="form-card" action="{{if .ActorForm.Editing}}/actors/{{.ActorForm.ID}}/edit{{else}}/actors{{end}}" method="post" hx-post="{{if .ActorForm.Editing}}/actors/{{.ActorForm.ID}}/edit{{else}}/actors{{end}}" hx-target="#actor-list" hx-swap="outerHTML">
+<form class="form-card" action="{{if .ActorForm.Editing}}/actors/{{.ActorForm.ID}}/edit{{else}}/actors{{end}}" method="post" hx-post="{{if .ActorForm.Editing}}/actors/{{.ActorForm.ID}}/edit{{else}}/actors{{end}}" hx-target="#actor-list" hx-swap="outerHTML" hx-indicator="closest form" hx-disabled-elt="button[type='submit']">
   <div class="form-grid">
-    <div class="field-stack"><label for="actor-name">Actor name</label><input class="input-brutal" id="actor-name" name="name" type="text" value="{{.ActorForm.Name}}" required aria-describedby="actor-name-error">{{with index .ActorForm.Errors "name"}}<span id="actor-name-error" class="form-feedback form-feedback--error" role="alert">{{.}}</span>{{end}}</div>
+    <div class="field-stack"><label for="actor-name">Actor name</label><input class="input-brutal" id="actor-name" name="name" type="text" value="{{.ActorForm.Name}}" required{{with index .ActorForm.Errors "name"}} aria-invalid="true" aria-describedby="actor-name-error"{{end}}>{{with index .ActorForm.Errors "name"}}<span id="actor-name-error" class="form-feedback form-feedback--error" role="alert">{{.}}</span>{{end}}</div>
     <div class="field-stack"><label for="actor-role">Role <span class="field-label">optional</span></label><input class="input-brutal" id="actor-role" name="role" type="text" value="{{.ActorForm.Role}}"></div>
     <div class="field-stack"><label for="actor-notes">Notes <span class="field-label">optional</span></label><textarea class="textarea-brutal" id="actor-notes" name="notes">{{.ActorForm.Notes}}</textarea></div>
   </div>

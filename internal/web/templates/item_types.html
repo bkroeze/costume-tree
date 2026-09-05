@@ -26,9 +26,9 @@
     </section>
     <section class="form-section" aria-labelledby="new-item-type-title">
       <div class="section-heading"><div><p class="section-kicker">Add a category</p><h2 id="new-item-type-title">New item type</h2></div></div>
-      <form class="form-card" action="/productions/{{.Production.ID}}/item-types" method="post" hx-post="/productions/{{.Production.ID}}/item-types" hx-target="#item-type-feedback" hx-swap="innerHTML">
-        <div id="item-type-feedback" aria-live="polite">{{template "item-type-feedback" .}}</div>
-        <div class="field-stack"><label for="item-type-name">Name</label><input class="input-brutal" id="item-type-name" name="name" type="text" required maxlength="100" autocomplete="off" placeholder="e.g. Cloak"></div>
+      <form id="item-type-create-form" class="form-card" action="/productions/{{.Production.ID}}/item-types" method="post" hx-post="/productions/{{.Production.ID}}/item-types" hx-target="#item-type-feedback" hx-swap="innerHTML" hx-indicator="closest form" hx-disabled-elt="button[type='submit']">
+        <div id="item-type-feedback" class="form-feedback" aria-live="polite" aria-atomic="true">{{template "item-type-feedback" .}}</div>
+        <div class="field-stack"><label for="item-type-name">Name</label><input class="input-brutal" id="item-type-name" name="name" type="text" required maxlength="100" autocomplete="off" placeholder="e.g. Cloak" aria-describedby="item-type-feedback"{{if .Error}} aria-invalid="true"{{end}}></div>
         <div class="form-actions"><button class="btn-brutal btn-cobalt" type="submit">Add item type</button></div>
       </form>
     </section>
@@ -43,7 +43,7 @@
 {{- end}}
 
 {{define "item-types-list" -}}
-<div class="item-type-list" aria-label="Item types">
+<div class="item-type-list" aria-label="Item types" aria-live="polite" aria-atomic="false">
   {{if .Error}}<p class="form-feedback form-feedback--error" role="alert">{{.Error}}</p>{{end}}
   {{if .Success}}<p class="form-feedback form-feedback--success" role="status">{{.Success}}</p>{{end}}
   {{if .Active}}
@@ -51,11 +51,11 @@
     {{range .Active}}
     <li class="item-type-row" id="item-type-{{.ID}}">
       <span class="item-type-name">{{.Name}}</span>
-      <form action="/productions/{{$.Production.ID}}/item-types/{{.ID}}" method="post" class="item-type-edit" hx-post="/productions/{{$.Production.ID}}/item-types/{{.ID}}" hx-target="#item-types-list" hx-swap="innerHTML">
+      <form action="/productions/{{$.Production.ID}}/item-types/{{.ID}}" method="post" class="item-type-edit" hx-post="/productions/{{$.Production.ID}}/item-types/{{.ID}}" hx-target="#item-types-list" hx-swap="innerHTML" hx-indicator="closest form" hx-disabled-elt="button[type='submit']">
         <label class="visually-hidden" for="item-type-{{.ID}}-rename">Rename {{.Name}}</label><input class="input-brutal" id="item-type-{{.ID}}-rename" name="name" type="text" value="{{.Name}}" required maxlength="100">
         <button class="btn-brutal btn-white btn-sm" type="submit">Rename</button>
       </form>
-      <form action="/productions/{{$.Production.ID}}/item-types/{{.ID}}/archive" method="post" hx-post="/productions/{{$.Production.ID}}/item-types/{{.ID}}/archive" hx-target="#item-types-list" hx-swap="innerHTML"><button class="btn-brutal btn-white btn-sm" type="submit" aria-label="Archive {{.Name}}">Archive</button></form>
+      <form action="/productions/{{$.Production.ID}}/item-types/{{.ID}}/archive" method="post" hx-post="/productions/{{$.Production.ID}}/item-types/{{.ID}}/archive" hx-target="#item-types-list" hx-swap="innerHTML" hx-indicator="closest form" hx-disabled-elt="button[type='submit']"><button class="btn-brutal btn-white btn-sm" type="submit" aria-label="Archive {{.Name}}">Archive</button></form>
     </li>
     {{end}}
   </ul>
@@ -63,7 +63,7 @@
   {{if .Archived}}
   <details class="item-type-archive"><summary>Archived item types ({{len .Archived}})</summary><ul>
     {{range .Archived}}
-    <li class="item-type-row" id="item-type-{{.ID}}-archived"><span class="item-type-name">{{.Name}}</span><form action="/productions/{{$.Production.ID}}/item-types/{{.ID}}/restore" method="post" hx-post="/productions/{{$.Production.ID}}/item-types/{{.ID}}/restore" hx-target="#item-types-list" hx-swap="innerHTML"><button class="btn-brutal btn-white btn-sm" type="submit" aria-label="Restore {{.Name}}">Restore</button></form></li>
+    <li class="item-type-row" id="item-type-{{.ID}}-archived"><span class="item-type-name">{{.Name}}</span><form action="/productions/{{$.Production.ID}}/item-types/{{.ID}}/restore" method="post" hx-post="/productions/{{$.Production.ID}}/item-types/{{.ID}}/restore" hx-target="#item-types-list" hx-swap="innerHTML" hx-indicator="closest form" hx-disabled-elt="button[type='submit']"><button class="btn-brutal btn-white btn-sm" type="submit" aria-label="Restore {{.Name}}">Restore</button></form></li>
     {{end}}
   </ul></details>
   {{end}}

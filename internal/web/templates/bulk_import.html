@@ -33,11 +33,11 @@
 {{- end}}
 
 {{define "bulk-import-form" -}}
-<form class="form-card" action="/production/{{.Production.ID}}/bulk" method="post" hx-post="/production/{{.Production.ID}}/bulk" hx-target="#bulk-import-content" hx-swap="outerHTML">
+<form class="form-card" action="/production/{{.Production.ID}}/bulk" method="post" hx-post="/production/{{.Production.ID}}/bulk" hx-target="#bulk-import-content" hx-swap="outerHTML" hx-indicator="closest form" hx-disabled-elt="button[type='submit']">
   <div class="section-heading"><div><p class="section-kicker">Paste entries</p><h2 id="bulk-import-form-title">Preview imported pieces</h2></div><p>One actor line, then item type lines, with a blank line between actors.</p></div>
-  {{if .Error}}<p class="form-feedback form-feedback--error" role="alert">{{.Error}}</p>{{end}}
-  <label class="field-stack" for="bulk-input"><span class="field-label">Actor and item types</span><textarea class="input-brutal" id="bulk-input" name="input" rows="14" required placeholder="Ada\nCloak\nHat\n\nBanquo\nSword">{{.Input}}</textarea></label>
-  <label class="field-inline"><input type="checkbox" name="allow_new_types" value="true" {{if .AllowNewTypes}}checked{{end}}> Allow new item types</label>
+  {{if .Error}}<p id="bulk-import-error" class="form-feedback form-feedback--error" role="alert">{{.Error}}</p>{{end}}
+  <label class="field-stack" for="bulk-input"><span class="field-label">Actor and item types</span><textarea class="input-brutal" id="bulk-input" name="input" rows="14" required placeholder="Ada\nCloak\nHat\n\nBanquo\nSword"{{if .Error}} aria-invalid="true" aria-describedby="bulk-import-error"{{end}}>{{.Input}}</textarea></label>
+  <label class="field-inline field-check"><input type="checkbox" name="allow_new_types" value="true" {{if .AllowNewTypes}}checked{{end}}> <span class="field-label">Allow new item types</span></label>
   <div class="form-actions"><button class="btn-brutal btn-cobalt" type="submit" name="action" value="preview">Preview import</button></div>
 </form>
 {{- end}}
@@ -45,10 +45,10 @@
 {{define "bulk-import-table" -}}
 <section class="form-section" aria-labelledby="bulk-import-preview-title">
   <div class="section-heading"><div><p class="section-kicker">Server-side preview</p><h2 id="bulk-import-preview-title">{{len .Preview.Rows}} item{{if ne (len .Preview.Rows) 1}}s{{end}} ready</h2></div><p>Names are resolved within {{.Production.Name}} without changing any records yet.</p></div>
-  <div class="table-wrap"><table class="data-table"><thead><tr><th>Source</th><th>Actor</th><th>Item type</th><th>Preview</th></tr></thead><tbody>
-  {{range .Preview.Rows}}<tr><td>line {{.ItemLine}}</td><td>{{.ActorName}} <span class="badge">{{.ActorState}}</span></td><td>{{.ItemTypeName}} <span class="badge">{{.ItemTypeState}}</span></td><td>{{if .Duplicate}}<span class="status-brutal">duplicate line (will import)</span>{{else if .Error}}<span class="form-feedback--error">{{.Error}}</span>{{else}}<span class="status-brutal">{{.Status}}</span>{{end}}</td></tr>{{end}}
+  <div class="table-wrap" tabindex="0" aria-label="Bulk import preview"><table class="data-table"><thead><tr><th scope="col">Source</th><th scope="col">Actor</th><th scope="col">Item type</th><th scope="col">Preview</th></tr></thead><tbody>
+  {{range .Preview.Rows}}<tr><td>line {{.ItemLine}}</td><td>{{.ActorName}} <span class="badge">{{.ActorState}}</span></td><td>{{.ItemTypeName}} <span class="badge">{{.ItemTypeState}}</span></td><td>{{if .Duplicate}}<span class="status-brutal">duplicate line (will import)</span>{{else if .Error}}<span class="form-feedback--error" role="alert">{{.Error}}</span>{{else}}<span class="status-brutal">{{.Status}}</span>{{end}}</td></tr>{{end}}
   </tbody></table></div>
-  <form class="form-actions" action="/production/{{.Production.ID}}/bulk" method="post" hx-post="/production/{{.Production.ID}}/bulk" hx-target="#bulk-import-content" hx-swap="outerHTML">
+  <form class="form-actions" action="/production/{{.Production.ID}}/bulk" method="post" hx-post="/production/{{.Production.ID}}/bulk" hx-target="#bulk-import-content" hx-swap="outerHTML" hx-indicator="closest form" hx-disabled-elt="button[type='submit']">
     <input type="hidden" name="action" value="commit"><input type="hidden" name="token" value="{{.Token}}">
     <button class="btn-brutal btn-cobalt" type="submit">Commit import</button>
   </form>
@@ -56,8 +56,8 @@
 {{- end}}
 
 {{define "bulk-import-result" -}}
-<section class="form-section" aria-labelledby="bulk-import-result-title" id="bulk-import-content">
-  {{if .Error}}<p class="form-feedback form-feedback--error" role="alert">{{.Error}}</p>{{end}}
+<section class="form-section" aria-labelledby="bulk-import-result-title" id="bulk-import-content" aria-live="polite" aria-atomic="true">
+  {{if .Error}}<p id="bulk-import-result-error" class="form-feedback form-feedback--error" role="alert">{{.Error}}</p>{{end}}
   {{if .Success}}<p class="form-feedback form-feedback--success" role="status">{{.Success}}</p>{{end}}
   {{if .Results}}
   <div class="section-heading"><div><p class="section-kicker">Imported pieces</p><h2 id="bulk-import-result-title">Result links</h2></div></div>

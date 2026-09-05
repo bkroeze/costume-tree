@@ -29,7 +29,7 @@
 <section aria-labelledby="summary-table-title">
   <div class="section-heading"><div><p class="section-kicker">Active inventory</p><h2 id="summary-table-title">Items by type</h2></div><p>Only active item types represented by active items are shown. Archived items and archived actors are excluded.</p></div>
   {{if .Rows}}
-  <div class="summary-table-wrap" style="overflow-x:auto">
+  <div class="summary-table-wrap" tabindex="0" aria-label="Costume item status summary">
     <table class="summary-table">
       <caption class="visually-hidden">Costume item status counts by item type</caption>
       <thead><tr><th scope="col">Item type</th><th scope="col">Total</th><th scope="col">Complete</th><th scope="col">In progress</th><th scope="col">Blocked</th><th scope="col">Ready</th><th scope="col">Not started</th></tr></thead>
