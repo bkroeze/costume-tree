@@ -1,0 +1,108 @@
+{{define "production-page" -}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Costume Tree production setup and actor management">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <script src="/assets/htmx.min.js" defer></script>
+</head>
+<body>
+  <header class="site-header"><div class="site-header__inner">
+    <a class="brand" href="/" aria-label="Costume Tree home"><span class="brand-mark" aria-hidden="true">CT</span><span class="brand-copy"><span>Costume Tree</span><small>Wardrobe operations</small></span></a>
+    <span class="badge">Production setup</span>
+  </div></header>
+  <main class="page-shell">
+    <section class="page-intro" aria-labelledby="production-title">
+      <div><p class="eyebrow">Workspace / first run</p><h1 id="production-title">Name your production.</h1><p class="page-intro__copy">Create the production that will hold your cast and costume inventory.</p></div>
+    </section>
+    <section class="form-section" aria-labelledby="production-form-title">
+      <div class="section-heading"><div><p class="section-kicker">Production</p><h2 id="production-form-title">Start a workspace</h2></div><p>A production keeps actors and item types safely scoped together.</p></div>
+      {{template "production-form" .}}
+    </section>
+  </main>
+  <footer class="site-footer">Costume Tree / backstage clarity, one piece at a time.</footer>
+</body>
+</html>
+{{- end}}
+
+{{define "production-bootstrap" -}}
+<section class="form-section" aria-labelledby="production-form-title">
+  <div class="section-heading"><div><p class="section-kicker">Production</p><h2 id="production-form-title">Start a workspace</h2></div><p>A production keeps actors and item types safely scoped together.</p></div>
+  {{template "production-form" .}}
+</section>
+{{- end}}
+
+{{define "production-form" -}}
+<form class="form-card" action="/production" method="post" hx-post="/production" hx-target="#production-feedback" hx-swap="outerHTML">
+  <div id="production-feedback" class="form-feedback" aria-live="polite">
+    {{with index .ProductionForm.Errors "name"}}<p class="form-feedback form-feedback--error" role="alert">{{.}}</p>{{end}}
+  </div>
+  <div class="form-grid">
+    <div class="field-stack">
+      <label for="production-name">Production name</label>
+
+      <input class="input-brutal" id="production-name" name="name" type="text" value="{{.ProductionForm.Name}}" autocomplete="organization" required aria-describedby="production-name-error">
+      {{with index .ProductionForm.Errors "name"}}<span id="production-name-error" class="form-feedback form-feedback--error" role="alert">{{.}}</span>{{end}}
+    </div>
+  </div>
+  <div class="form-actions"><p class="form-note">You can add actors as soon as the workspace is created.</p><button class="btn-brutal btn-cobalt" type="submit">Create production</button></div>
+</form>
+{{- end}}
+
+{{define "actor-page" -}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Costume Tree actor management">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <script src="/assets/htmx.min.js" defer></script>
+</head>
+<body>
+  <header class="site-header"><div class="site-header__inner">
+    <a class="brand" href="/" aria-label="Costume Tree home"><span class="brand-mark" aria-hidden="true">CT</span><span class="brand-copy"><span>Costume Tree</span><small>Wardrobe operations</small></span></a>
+    {{with .Production}}<div class="header-actions"><span class="badge">{{.Name}}</span><a class="btn-brutal btn-cobalt" href="#add-actor">+ Add actor</a></div>{{end}}
+  </div></header>
+  <main class="page-shell">
+    <section class="page-intro" aria-labelledby="actors-page-title">
+      <div><p class="eyebrow">Workspace / cast</p><h1 id="actors-page-title">{{with .Production}}{{.Name}}{{end}} actors.</h1><p class="page-intro__copy">Keep names, roles, and fitting notes in one clear cast list.</p></div>
+    </section>
+    <section aria-labelledby="actors-list-title"><div class="section-heading"><div><p class="section-kicker">Cast register</p><h2 id="actors-list-title">Actors</h2></div><p>Archived actors stay visible for a reliable history and are never deleted.</p></div>{{template "actor-list" .}}</section>
+    <section class="form-section" id="add-actor" aria-labelledby="actor-form-title"><div class="section-heading"><div><p class="section-kicker">Cast register</p><h2 id="actor-form-title">{{if .ActorForm.Editing}}Edit actor{{else}}Add an actor{{end}}</h2></div><p>Names may repeat when two performers share a billing name.</p></div>{{template "actor-form" .}}</section>
+  </main>
+  <footer class="site-footer">Costume Tree / backstage clarity, one piece at a time.</footer>
+</body>
+</html>
+{{- end}}
+
+{{define "actor-list" -}}
+<div id="actor-list" class="actor-feed" aria-live="polite">
+  {{if .Empty}}<article class="form-card"><p class="form-feedback" role="status">No active actors yet. Add the first actor below.</p></article>{{else}}
+    {{range .Actors}}
+    <article class="actor-block">
+      <header class="actor-summary-bar"><div class="actor-info"><span class="badge-icon" aria-hidden="true">A</span><div><h3 class="actor-name-text">{{.Name}}</h3><p class="actor-role-text">{{if .Role}}{{.Role}}{{else}}Role not assigned{{end}}</p></div></div><div class="header-actions"><a class="btn-brutal btn-white btn-sm" href="/actors/{{.ID}}/edit">Edit</a><form action="/actors/{{.ID}}/archive" method="post" hx-post="/actors/{{.ID}}/archive" hx-target="#actor-list" hx-swap="outerHTML"><button class="btn-brutal btn-white btn-sm" type="submit">Archive</button></form></div></header>
+      {{with .Notes}}<p class="piece-description">{{.}}</p>{{end}}
+    </article>
+    {{end}}
+  {{end}}
+  {{if .ArchivedActors}}<details class="form-card"><summary><strong>Archived actors ({{len .ArchivedActors}})</strong></summary><div class="actor-feed">
+    {{range .ArchivedActors}}<article class="actor-block"><header class="actor-summary-bar"><div class="actor-info"><span class="badge-icon" aria-hidden="true">A</span><div><h3 class="actor-name-text">{{.Name}}</h3><p class="actor-role-text">{{if .Role}}{{.Role}}{{else}}Role not assigned{{end}}</p></div></div><span class="status-brutal status-example">Archived</span></header>{{with .Notes}}<p class="piece-description">{{.}}</p>{{end}}</article>{{end}}
+  </div></details>{{end}}
+</div>
+{{- end}}
+
+{{define "actor-form" -}}
+<form class="form-card" action="{{if .ActorForm.Editing}}/actors/{{.ActorForm.ID}}/edit{{else}}/actors{{end}}" method="post" hx-post="{{if .ActorForm.Editing}}/actors/{{.ActorForm.ID}}/edit{{else}}/actors{{end}}" hx-target="#actor-list" hx-swap="outerHTML">
+  <div class="form-grid">
+    <div class="field-stack"><label for="actor-name">Actor name</label><input class="input-brutal" id="actor-name" name="name" type="text" value="{{.ActorForm.Name}}" required aria-describedby="actor-name-error">{{with index .ActorForm.Errors "name"}}<span id="actor-name-error" class="form-feedback form-feedback--error" role="alert">{{.}}</span>{{end}}</div>
+    <div class="field-stack"><label for="actor-role">Role <span class="field-label">optional</span></label><input class="input-brutal" id="actor-role" name="role" type="text" value="{{.ActorForm.Role}}"></div>
+    <div class="field-stack"><label for="actor-notes">Notes <span class="field-label">optional</span></label><textarea class="textarea-brutal" id="actor-notes" name="notes">{{.ActorForm.Notes}}</textarea></div>
+  </div>
+  <div class="form-actions"><p class="form-note">All fields remain editable until the actor is archived.</p><button class="btn-brutal btn-cobalt" type="submit">{{if .ActorForm.Editing}}Save actor{{else}}Add actor{{end}}</button></div>
+</form>
+{{- end}}

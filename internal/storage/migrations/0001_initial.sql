@@ -19,7 +19,6 @@ CREATE TABLE actors (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE (production_id, id),
-    UNIQUE (production_id, name),
     FOREIGN KEY (production_id) REFERENCES productions (id) ON DELETE RESTRICT
 );
 
@@ -31,7 +30,6 @@ CREATE TABLE item_types (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     UNIQUE (production_id, id),
-    UNIQUE (production_id, name),
     FOREIGN KEY (production_id) REFERENCES productions (id) ON DELETE RESTRICT
 );
 
@@ -49,11 +47,11 @@ CREATE TABLE costume_items (
     code TEXT NOT NULL CHECK (length(trim(code)) > 0),
     description TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'Not Started'
-        CHECK (status IN ('Not Started', 'In Progress', 'Blocked', 'Complete')),
+        CHECK (status IN ('Not Started', 'In Progress', 'Blocked', 'Ready', 'Complete')),
     progress INTEGER NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
     next_action TEXT NOT NULL DEFAULT '',
-    blocker TEXT NOT NULL DEFAULT '',
-    notes TEXT NOT NULL DEFAULT '',
+    blocker      TEXT NOT NULL DEFAULT '',
+    notes        TEXT NOT NULL DEFAULT '',
     archived_at TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -68,6 +66,10 @@ CREATE TABLE costume_items (
 
 CREATE INDEX idx_productions_active ON productions (archived_at, name);
 CREATE INDEX idx_actors_production_active ON actors (production_id, archived_at, name);
+
+CREATE UNIQUE INDEX idx_item_types_active_name
+    ON item_types (production_id, lower(name))
+    WHERE archived_at IS NULL;
 CREATE INDEX idx_item_types_production_active ON item_types (production_id, archived_at, name);
 CREATE INDEX idx_costume_items_production_active
     ON costume_items (production_id, archived_at, id);

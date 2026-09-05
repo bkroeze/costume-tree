@@ -14,6 +14,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"costume-tree/internal/storage"
 )
 
 //go:embed templates/*.html assets/*
@@ -75,12 +77,45 @@ func New(logger *slog.Logger, readiness ...Readiness) (http.Handler, error) {
 	if len(readiness) == 1 {
 		server.readiness = readiness[0]
 	}
+
 	mux := http.NewServeMux()
 	mux.Handle("GET /assets/", cacheAssets(http.StripPrefix("/assets/", http.FileServer(http.FS(assets)))))
-	mux.Handle("GET /{$}", server.handle("home", server.home))
 	mux.Handle("POST /demo", server.handle("demo", server.demo))
 	mux.HandleFunc("GET /healthz", server.health)
+
+	if database, ok := readinessDatabase(readiness); ok {
+		productions := storage.NewProductionRepository(database)
+		actors := storage.NewActorRepository(database)
+		itemTypes := storage.NewItemTypeRepository(database)
+		actorHandler := NewActorHandler(productions, actors, pages, itemTypes)
+		itemTypeHandler := NewItemTypeHandler(productions, itemTypes, pages)
+
+		mux.Handle("GET /{$}", server.handle("production", actorHandler.Production))
+		mux.Handle("GET /production", server.handle("production", actorHandler.Production))
+		mux.Handle("POST /production", server.handle("production", actorHandler.Production))
+		mux.Handle("GET /actors", server.handle("actors", actorHandler.Actors))
+		mux.Handle("POST /actors", server.handle("actors", actorHandler.Actors))
+		mux.Handle("GET /actors/{id}", server.handle("actor", actorHandler.EditActor))
+		mux.Handle("POST /actors/{id}", server.handle("actor", actorHandler.EditActor))
+		mux.Handle("POST /actors/{id}/archive", server.handle("actor-archive", actorHandler.ArchiveActor))
+
+		mux.Handle("GET /production/{production}/item-types", server.handle("item-types", itemTypeHandler.ItemTypes))
+		mux.Handle("POST /production/{production}/item-types", server.handle("item-type-create", itemTypeHandler.CreateItemType))
+		mux.Handle("POST /production/{production}/item-types/{id}/rename", server.handle("item-type-rename", itemTypeHandler.RenameItemType))
+		mux.Handle("POST /production/{production}/item-types/{id}/archive", server.handle("item-type-archive", itemTypeHandler.ArchiveItemType))
+		mux.Handle("POST /production/{production}/item-types/{id}/restore", server.handle("item-type-restore", itemTypeHandler.RestoreItemType))
+	} else {
+		mux.Handle("GET /{$}", server.handle("home", server.home))
+	}
 	return mux, nil
+}
+
+func readinessDatabase(readiness []Readiness) (*storage.DB, bool) {
+	if len(readiness) != 1 {
+		return nil, false
+	}
+	database, ok := readiness[0].(*storage.DB)
+	return database, ok && database != nil
 }
 
 type server struct {

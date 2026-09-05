@@ -10,6 +10,7 @@ const (
 	StatusNotStarted = "Not Started"
 	StatusInProgress = "In Progress"
 	StatusBlocked    = "Blocked"
+	StatusReady      = "Ready"
 	StatusComplete   = "Complete"
 )
 

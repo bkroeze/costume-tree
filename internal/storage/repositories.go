@@ -509,6 +509,21 @@ func (r *itemTypeRepository) Archive(ctx context.Context, productionID, id int64
 	return nil
 }
 
+// Restore reactivates an archived item type while preserving its ID.
+func (r *itemTypeRepository) Restore(ctx context.Context, productionID, id int64) error {
+	result, err := r.db.db.ExecContext(ctx,
+		`UPDATE item_types SET archived_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE production_id = ? AND id = ?`,
+		productionID, id,
+	)
+	if err != nil {
+		return fmt.Errorf("storage: restore item type: %w", err)
+	}
+	if count, _ := result.RowsAffected(); count == 0 {
+		return notFound("item type")
+	}
+	return nil
+}
+
 // Costume-item repositories.
 type costumeItemRepository struct{ db *DB }
 
