@@ -667,6 +667,43 @@ h3 {
   margin-top: 2.5rem;
 }
 
+.costume-item-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem 1.75rem;
+  margin: 1.5rem 0;
+  padding: 0;
+}
+
+.costume-item-detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.costume-item-detail-field dt {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.costume-item-detail-field dd {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.costume-item-detail-field dd.empty-state {
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+}
+
 .form-card {
   padding: 1.25rem;
   background: var(--surface);
@@ -1042,16 +1079,65 @@ details > summary:focus-visible {
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 1.25rem;
   border: 2px solid var(--border);
   border-radius: var(--radius-small);
-  padding: 0.8rem 1rem;
+  padding: 0.9rem 1.15rem;
   background: var(--surface);
   box-shadow: var(--shadow-small);
 }
 
 .item-type-row > div {
   min-width: 0;
+}
+
+.item-type-row__info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  flex: 1 1 auto;
+}
+
+.item-type-name {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.costume-item-desc {
+  width: 100%;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-top: 0.15rem;
+}
+
+.item-type-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 0.85rem;
+}
+
+.item-type-row__progress {
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--cobalt-dark);
+}
+
+.item-type-row__blocker {
+  width: 100%;
+  border: 2px solid var(--coral);
+  border-radius: var(--radius-small);
+  padding: 0.35rem 0.55rem;
+  background: var(--coral-soft);
+  color: #8f2518;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-top: 0.25rem;
 }
 
 .item-type-row form {
