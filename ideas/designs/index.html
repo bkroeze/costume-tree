@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Costume Tree — Dashboard Concepts Gallery</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #30363d;
+      --text: #f0f6fc;
+      --muted: #8b949e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 2rem 1rem;
+      line-height: 1.5;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+      padding: 2rem;
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(239, 68, 68, 0.1));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+    }
+    h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.02em; }
+    p.subtitle { color: var(--muted); font-size: 1.1rem; max-width: 700px; margin: 0 auto 1.5rem; }
+    .nav-tabs {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .nav-btn {
+      padding: 0.75rem 1.5rem;
+      border-radius: 9999px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      text-decoration: none;
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .nav-btn:hover { transform: translateY(-2px); }
+    .btn-1 { background: #d97706; box-shadow: 0 4px 14px rgba(217, 119, 6, 0.4); }
+    .btn-2 { background: #2563eb; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4); }
+    .btn-3 { background: #059669; box-shadow: 0 4px 14px rgba(5, 150, 105, 0.4); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+    .concept-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.2s ease;
+    }
+    .concept-card:hover { border-color: #58a6ff; }
+    .card-header {
+      padding: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-tag {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      font-weight: 700;
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      margin-bottom: 0.75rem;
+    }
+    .tag-1 { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .tag-2 { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    .tag-3 { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .card-title { font-size: 1.4rem; font-weight: 800; margin-bottom: 0.5rem; }
+    .card-desc { color: var(--muted); font-size: 0.95rem; margin-bottom: 1rem; }
+    .card-body {
+      padding: 1.5rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .traits { list-style: none; margin-bottom: 1.5rem; }
+    .traits li {
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+    .traits li::before {
+      content: "✦";
+      color: #f59e0b;
+    }
+    .preview-frame {
+      width: 100%;
+      height: 280px;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      background: #000;
+    }
+    .btn-action {
+      display: block;
+      text-align: center;
+      padding: 0.9rem 1.5rem;
+      font-weight: 800;
+      font-size: 1rem;
+      border-radius: 10px;
+      text-decoration: none;
+      color: white;
+      transition: all 0.2s ease;
+    }
+    .instructions-box {
+      margin-top: 3rem;
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .instructions-box h3 { font-size: 1.2rem; margin-bottom: 0.75rem; color: #f3f4f6; }
+    .instructions-box ol { padding-left: 1.5rem; color: #d1d5db; }
+    .instructions-box li { margin-bottom: 0.5rem; }
+    code { font-family: 'JetBrains Mono', monospace; background: #111827; padding: 0.2rem 0.4rem; border-radius: 4px; color: #f59e0b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Costume Tree — Design Concepts</h1>
+      <p class="subtitle">High-contrast, bold, and phone-friendly dashboard explorations for theatrical costume piece tracking.</p>
+      <div class="nav-tabs">
+        <a href="design-1-stage-amber.html" class="nav-btn btn-1">Option 1: Stage Amber & Marquee</a>
+        <a href="design-2-high-contrast-electric.html" class="nav-btn btn-2">Option 2: High-Contrast Electric</a>
+        <a href="design-3-emerald-workshop.html" class="nav-btn btn-3">Option 3: Emerald Workshop</a>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- Design 1 -->
+      <div class="concept-card">
+        <iframe class="preview-frame" src="design-1-stage-amber.html" scrolling="no"></iframe>
+        <div class="card-header">
+          <span class="card-tag tag-1">Concept A</span>
+          <h2 class="card-title">Stage Amber & Marquee Bold</h2>
+          <p class="card-desc">Backstage theater aesthetic with warm amber/gold accents, deep carbon dark mode, big tactile pill buttons, and quick-tap status badges.</p>
+        </div>
+        <div class="card-body">
+          <ul class="traits">
+            <li><strong>Vibe:</strong> Theatrical, warm, industrial yet refined.</li>
+            <li><strong>Colors:</strong> Amber/Gold (#f59e0b), Crimson (#ef4444), Carbon (#0f172a).</li>
+            <li><strong>Key Features:</strong> Large chunky stat counters, actor avatar badges, single-tap status pills, high visibility in dim backstage lighting.</li>
+          </ul>
+          <a href="design-1-stage-amber.html" class="btn-action btn-1">Launch Option 1 Full Screen &rarr;</a>
+        </div>
+      </div>
+
+      <!-- Design 2 -->
+      <div class="concept-card">
+        <iframe class="preview-frame" src="design-2-high-contrast-electric.html" scrolling="no"></iframe>
+        <div class="card-header">
+          <span class="card-tag tag-2">Concept B</span>
+          <h2 class="card-title">Electric Cobalt & Neo-Brutalist</h2>
+          <p class="card-desc">Punchy modern tool aesthetic with ultra-thick borders, electric cobalt and highlighter yellow accents, bold geometric typography, and high-speed triage buttons.</p>
+        </div>
+        <div class="card-body">
+          <ul class="traits">
+            <li><strong>Vibe:</strong> Ultra-modern, energetic, crisp neo-brutalist utility.</li>
+            <li><strong>Colors:</strong> Electric Cobalt (#2563eb), Laser Yellow (#fde047), Hot Magenta (#ec4899).</li>
+            <li><strong>Key Features:</strong> High-contrast borders, solid offset drop-shadows, big interactive action triggers, instant exception filtering.</li>
+          </ul>
+          <a href="design-2-high-contrast-electric.html" class="btn-action btn-2">Launch Option 2 Full Screen &rarr;</a>
+        </div>
+      </div>
+
+      <!-- Design 3 -->
+      <div class="concept-card">
+        <iframe class="preview-frame" src="design-3-emerald-workshop.html" scrolling="no"></iframe>
+        <div class="card-header">
+          <span class="card-tag tag-3">Concept C</span>
+          <h2 class="card-title">Emerald Workshop & Clean Slate</h2>
+          <p class="card-desc">Clean, highly structured atelier aesthetic using rich forest emerald, terracotta coral, crisp clean card surfaces, and accessible tabular progress bars.</p>
+        </div>
+        <div class="card-body">
+          <ul class="traits">
+            <li><strong>Vibe:</strong> Professional craft studio, organized, balanced tactile precision.</li>
+            <li><strong>Colors:</strong> Emerald Jade (#059669), Terracotta (#f97316), Deep Slate (#0f172a).</li>
+            <li><strong>Key Features:</strong> Dual view mode (Card grid vs Table list), inline progress sliders, rich category chips, clean visual hierarchy.</li>
+          </ul>
+          <a href="design-3-emerald-workshop.html" class="btn-action btn-3">Launch Option 3 Full Screen &rarr;</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="instructions-box">
+      <h3>Review Instructions</h3>
+      <ol>
+        <li>Click each option above to test layout, interactive mock buttons (modal dialogs, fast item status toggles, actor filters, search simulation).</li>
+        <li>Resize your browser or view on mobile (or test at 390px width) to verify phone-friendliness and tap targets.</li>
+        <li>Pick the design direction (or hybrid elements) you want to standardize across the full Costume Tree MVP.</li>
+        <li>Update Kata card <code>costume-tree#des1</code> with your decision.</li>
+      </ol>
+    </div>
+  </div>
+</body>
+</html>

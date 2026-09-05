@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Costume Tree — Stage Amber & Marquee Bold</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    :root {
+      --bg: #090d16;
+      --surface: #131b2e;
+      --surface-card: #1c263d;
+      --surface-hover: #24304d;
+      --border: #2e3d5e;
+      --amber: #f59e0b;
+      --amber-light: #fbbf24;
+      --amber-glow: rgba(245, 158, 11, 0.25);
+      --crimson: #ef4444;
+      --crimson-glow: rgba(239, 68, 68, 0.2);
+      --emerald: #10b981;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --font-main: 'Plus Jakarta Sans', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-main);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Bar */
+    header.marquee-header {
+      background: var(--surface);
+      border-bottom: 2px solid var(--border);
+      padding: 1rem 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+    .header-inner {
+      max-width: 1300px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text);
+    }
+    .logo-badge {
+      background: linear-gradient(135deg, var(--amber), #d97706);
+      color: #000;
+      font-weight: 800;
+      font-size: 1.3rem;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 16px var(--amber-glow);
+    }
+    .prod-selector {
+      display: flex;
+      flex-direction: column;
+    }
+    .prod-label { font-size: 0.7rem; text-transform: uppercase; font-weight: 700; color: var(--amber); letter-spacing: 0.05em; }
+    .prod-title { font-size: 1.15rem; font-weight: 800; }
+
+    /* Big Action Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.8rem 1.6rem;
+      font-weight: 800;
+      font-size: 1rem;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+      text-decoration: none;
+      font-family: var(--font-main);
+    }
+    .btn-amber {
+      background: var(--amber);
+      color: #090d16;
+      box-shadow: 0 4px 14px var(--amber-glow);
+    }
+    .btn-amber:hover {
+      background: var(--amber-light);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+    }
+    .btn-amber:active { transform: translateY(0); }
+    .btn-secondary {
+      background: var(--surface-card);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover {
+      background: var(--surface-hover);
+      border-color: var(--text-muted);
+    }
+    .btn-sm { padding: 0.45rem 0.9rem; font-size: 0.85rem; border-radius: 8px; }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      max-width: 1300px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+
+    /* Production Stats Banner */
+    .stats-marquee {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.25rem 1.5rem;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; width: 4px; height: 100%;
+      background: var(--amber);
+    }
+    .stat-card.stat-blocked::before { background: var(--crimson); }
+    .stat-card.stat-complete::before { background: var(--emerald); }
+    .stat-card.stat-total::before { background: #3b82f6; }
+    .stat-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.25rem;
+    }
+    .stat-val-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+    .stat-number {
+      font-size: 2.25rem;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      line-height: 1;
+    }
+    .stat-pct {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--amber);
+    }
+
+    /* Production Progress Bar */
+    .overall-bar-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .bar-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.6rem;
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+    .progress-track {
+      height: 14px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 9999px;
+      overflow: hidden;
+      display: flex;
+    }
+    .progress-fill-done { background: var(--emerald); }
+    .progress-fill-prog { background: var(--amber); }
+    .progress-fill-block { background: var(--crimson); }
+
+    /* Filter & Controls Bar */
+    .control-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .search-group {
+      display: flex;
+      align-items: center;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 0.35rem 0.8rem;
+      gap: 0.5rem;
+      flex: 1;
+      max-width: 450px;
+    }
+    .search-group:focus-within { border-color: var(--amber); }
+    .search-input {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 0.95rem;
+      outline: none;
+      width: 100%;
+      font-family: var(--font-main);
+    }
+    .filter-pills {
+      display: flex;
+      gap: 0.5rem;
+      overflow-x: auto;
+      padding-bottom: 0.25rem;
+    }
+    .filter-pill {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 0.4rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .filter-pill.active {
+      background: var(--amber);
+      color: #090d16;
+      border-color: var(--amber);
+    }
+
+    /* Actor Grid / Table */
+    .actors-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 1.25rem;
+    }
+    .actor-card {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 18px;
+      padding: 1.4rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .actor-card:hover {
+      border-color: var(--amber);
+      transform: translateY(-3px);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    }
+    .actor-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .actor-identity {
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+    }
+    .actor-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: var(--surface-card);
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--amber);
+    }
+    .actor-name { font-size: 1.25rem; font-weight: 800; line-height: 1.2; }
+    .actor-role { font-size: 0.85rem; color: var(--text-muted); font-weight: 600; }
+    
+    .status-badge-chip {
+      padding: 0.3rem 0.6rem;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+    }
+    .chip-blocked { background: var(--crimson-glow); color: #fca5a5; border: 1px solid var(--crimson); }
+    .chip-ok { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border: 1px solid var(--emerald); }
+
+    /* Piece previews */
+    .pieces-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .piece-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface-card);
+      padding: 0.5rem 0.8rem;
+      border-radius: 10px;
+      font-size: 0.85rem;
+    }
+    .piece-id { font-family: var(--font-mono); font-weight: 700; color: var(--amber-light); }
+    .piece-name { font-weight: 600; flex: 1; margin: 0 0.75rem; }
+    .status-pill {
+      font-size: 0.7rem;
+      font-weight: 800;
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+    .status-complete { background: var(--emerald); color: #000; }
+    .status-progress { background: var(--amber); color: #000; }
+    .status-blocked { background: var(--crimson); color: #fff; }
+    .status-notstarted { background: #475569; color: #fff; }
+
+    .actor-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--border);
+      padding-top: 0.75rem;
+      margin-top: auto;
+    }
+    .actor-metric {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .actor-metric strong { color: var(--text); }
+    .actor-pct-big {
+      font-family: var(--font-mono);
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: var(--amber);
+    }
+
+    /* Modal / Drawer */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      padding: 1rem;
+    }
+    .modal-box {
+      background: var(--surface);
+      border: 2px solid var(--amber);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 650px;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 2rem;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+    }
+    .form-group { margin-bottom: 1.25rem; }
+    .form-group label { display: block; font-weight: 700; font-size: 0.85rem; margin-bottom: 0.4rem; color: var(--amber); text-transform: uppercase; }
+    .form-control {
+      width: 100%;
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      color: var(--text);
+      font-family: var(--font-main);
+      font-size: 1rem;
+    }
+    .form-control:focus { outline: none; border-color: var(--amber); }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .header-inner { flex-direction: column; align-items: stretch; }
+      .actors-grid { grid-template-columns: 1fr; }
+      .stats-marquee { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body x-data="{
+  activeFilter: 'all',
+  searchQuery: '',
+  showAddModal: false,
+  showDetailModal: false,
+  selectedActor: null,
+  actors: [
+    { id: 1, name: 'Eleanor Vance', role: 'Lady Macbeth', pieces: 5, complete: 4, blocked: 1, pct: 85, items: [
+      { id: 'C-0001', type: 'Velvet Gown', desc: 'Blood red heavy velvet', status: 'Progress', pct: 80, next: 'Hem line adjustment' },
+      { id: 'C-0002', type: 'Crown / Tiara', desc: 'Antique brass with obsidian stones', status: 'Blocked', pct: 40, next: 'Awaiting stone shipment', blocker: 'Missing obsidian cabochons from vendor' },
+      { id: 'C-0003', type: 'Dagger Sheath', desc: 'Hidden undergarment holster', status: 'Complete', pct: 100, next: 'Ready in dressing room' },
+      { id: 'C-0004', type: 'Silk Robe', desc: 'Sleepwalking scene sheer silk', status: 'Complete', pct: 100, next: 'Pressed and bagged' },
+      { id: 'C-0005', type: 'Velvet Cape', desc: 'Ermine trim winter mantle', status: 'Complete', pct: 100, next: 'Complete' }
+    ]},
+    { id: 2, name: 'Marcus Sterling', role: 'Macbeth', pieces: 6, complete: 5, blocked: 0, pct: 92, items: [
+      { id: 'C-0006', type: 'Tunic & Armor', desc: 'Studded leather battle cuirass', status: 'Complete', pct: 100, next: 'Final fitting approved' },
+      { id: 'C-0007', type: 'High Boots', desc: 'Knee-high distress brown leather', status: 'Complete', pct: 100, next: 'Waterproofed' },
+      { id: 'C-0008', type: 'Coronation Mantle', desc: 'Gold embroidered crimson wool', status: 'Progress', pct: 75, next: 'Embroidery on collar' },
+      { id: 'C-0009', type: 'Claymore Scabbard', desc: 'Broadsword back-strap', status: 'Complete', pct: 100, next: 'Ready' },
+      { id: 'C-0010', type: 'Banqueting Tunic', desc: 'Dark green patterned silk', status: 'Complete', pct: 100, next: 'Ready' },
+      { id: 'C-0011', type: 'Ring Set', desc: 'Thane signet ring replica', status: 'Complete', pct: 100, next: 'In prop box A' }
+    ]},
+    { id: 3, name: 'Gideon Croft', role: 'Banquo', pieces: 4, complete: 1, blocked: 2, pct: 45, items: [
+      { id: 'C-0012', type: 'Ghost Shroud', desc: 'Distressed tattered gray linen', status: 'Blocked', pct: 30, next: 'Need theatrical blood dye test', blocker: 'Wash test failed; staining base tunic' },
+      { id: 'C-0013', type: 'Chainmail Hauberk', desc: 'Lightweight aluminum links', status: 'Blocked', pct: 20, next: 'Resize shoulders', blocker: 'Pinched neck closure' },
+      { id: 'C-0014', type: 'Leather Bracers', desc: 'Cross-stitched forearms', status: 'Complete', pct: 100, next: 'Ready' },
+      { id: 'C-0015', type: 'Riding Cloak', desc: 'Waxed heavy wool', status: 'Progress', pct: 60, next: 'Attach toggle clasp' }
+    ]},
+    { id: 4, name: 'Clara Oswald', role: 'First Witch', pieces: 3, complete: 3, blocked: 0, pct: 100, items: [
+      { id: 'C-0016', type: 'Ragged Tattered Robe', desc: 'Layered cheesecloth & raw linen', status: 'Complete', pct: 100, next: 'Complete' },
+      { id: 'C-0017', type: 'Bone Necklace', desc: 'Resin cast animal bones', status: 'Complete', pct: 100, next: 'Complete' },
+      { id: 'C-0018', type: 'Muddy Footwraps', desc: 'Reinforced burlap gaiters', status: 'Complete', pct: 100, next: 'Complete' }
+    ]}
+  ],
+  filteredActors() {
+    return this.actors.filter(a => {
+      const matchText = a.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                        a.role.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                        a.items.some(i => i.id.toLowerCase().includes(this.searchQuery.toLowerCase()) || i.type.toLowerCase().includes(this.searchQuery.toLowerCase()));
+      if (!matchText) return false;
+      if (this.activeFilter === 'blocked') return a.blocked > 0;
+      if (this.activeFilter === 'progress') return a.pct < 100;
+      if (this.activeFilter === 'complete') return a.pct === 100;
+      return true;
+    });
+  },
+  openActor(actor) {
+    this.selectedActor = actor;
+    this.showDetailModal = true;
+  }
+}">
+
+  <!-- Header -->
+  <header class="marquee-header">
+    <div class="header-inner">
+      <div style="display: flex; align-items: center; gap: 1.25rem;">
+        <a href="index.html" class="brand">
+          <div class="logo-badge">CT</div>
+        </a>
+        <div class="prod-selector">
+          <span class="prod-label">Active Production</span>
+          <div class="prod-title">Macbeth — Fall 2026 Mainstage ▾</div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <button class="btn btn-secondary btn-sm" onclick="window.location.href='index.html'">◂ All Designs</button>
+        <button class="btn btn-amber" @click="showAddModal = true">+ New Costume Piece</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Top Stat Marquee -->
+    <section class="stats-marquee">
+      <div class="stat-card stat-total">
+        <div class="stat-label">Total Pieces</div>
+        <div class="stat-val-row">
+          <span class="stat-number">18</span>
+          <span style="font-weight: 700; color: #60a5fa;">4 Actors</span>
+        </div>
+      </div>
+
+      <div class="stat-card stat-complete">
+        <div class="stat-label">Ready / Complete</div>
+        <div class="stat-val-row">
+          <span class="stat-number" style="color: var(--emerald);">13</span>
+          <span class="stat-pct" style="color: var(--emerald);">72%</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">In Progress</div>
+        <div class="stat-val-row">
+          <span class="stat-number" style="color: var(--amber);">2</span>
+          <span class="stat-pct">11%</span>
+        </div>
+      </div>
+
+      <div class="stat-card stat-blocked">
+        <div class="stat-label">Blocked Work</div>
+        <div class="stat-val-row">
+          <span class="stat-number" style="color: var(--crimson);">3</span>
+          <span class="stat-pct" style="color: var(--crimson);">17%</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Overall Production Progress -->
+    <section class="overall-bar-wrap">
+      <div class="bar-header">
+        <span>Production Readiness Rollup</span>
+        <span style="font-family: var(--font-mono); color: var(--amber); font-weight: 800;">78% Overall</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill-done" style="width: 72%;" title="Complete: 72%"></div>
+        <div class="progress-fill-prog" style="width: 11%;" title="In Progress: 11%"></div>
+        <div class="progress-fill-block" style="width: 17%;" title="Blocked: 17%"></div>
+      </div>
+    </section>
+
+    <!-- Search & Filters -->
+    <div class="control-strip">
+      <div class="search-group">
+        <span style="color: var(--text-muted); font-size: 1.1rem;">🔍</span>
+        <input type="text" class="search-input" placeholder="Search piece ID (e.g. C-0002), actor, or garment..." x-model="searchQuery">
+      </div>
+
+      <div class="filter-pills">
+        <button class="filter-pill" :class="{ 'active': activeFilter === 'all' }" @click="activeFilter = 'all'">All Actors (4)</button>
+        <button class="filter-pill" :class="{ 'active': activeFilter === 'blocked' }" @click="activeFilter = 'blocked'">⚠️ Blocked Exceptions (2)</button>
+        <button class="filter-pill" :class="{ 'active': activeFilter === 'progress' }" @click="activeFilter = 'progress'">⏳ Incomplete (3)</button>
+        <button class="filter-pill" :class="{ 'active': activeFilter === 'complete' }" @click="activeFilter = 'complete'">✓ 100% Ready (1)</button>
+      </div>
+    </div>
+
+    <!-- Actor Cards Grid -->
+    <section class="actors-grid">
+      <template x-for="actor in filteredActors()" :key="actor.id">
+        <div class="actor-card" @click="openActor(actor)">
+          <div class="actor-head">
+            <div class="actor-identity">
+              <div class="actor-avatar" x-text="actor.name.split(' ').map(n=>n[0]).join('')"></div>
+              <div>
+                <div class="actor-name" x-text="actor.name"></div>
+                <div class="actor-role" x-text="actor.role"></div>
+              </div>
+            </div>
+            <template x-if="actor.blocked > 0">
+              <span class="status-badge-chip chip-blocked" x-text="`${actor.blocked} Blocked`"></span>
+            </template>
+            <template x-if="actor.blocked === 0 && actor.pct === 100">
+              <span class="status-badge-chip chip-ok">Complete</span>
+            </template>
+          </div>
+
+          <!-- Mini pieces preview list -->
+          <div class="pieces-list">
+            <template x-for="item in actor.items.slice(0, 3)" :key="item.id">
+              <div class="piece-row">
+                <span class="piece-id" x-text="item.id"></span>
+                <span class="piece-name" x-text="item.type"></span>
+                <span class="status-pill" :class="{
+                  'status-complete': item.status === 'Complete',
+                  'status-progress': item.status === 'Progress',
+                  'status-blocked': item.status === 'Blocked',
+                  'status-notstarted': item.status === 'Not Started'
+                }" x-text="item.status"></span>
+              </div>
+            </template>
+            <template x-if="actor.items.length > 3">
+              <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 0.2rem;">
+                + <span x-text="actor.items.length - 3"></span> more pieces...
+              </div>
+            </template>
+          </div>
+
+          <!-- Card Footer -->
+          <div class="actor-footer">
+            <div class="actor-metric">
+              <strong x-text="actor.pieces"></strong> Pieces &bull; <span x-text="actor.complete"></span> Done
+            </div>
+            <div class="actor-pct-big" x-text="`${actor.pct}%`"></div>
+          </div>
+        </div>
+      </template>
+    </section>
+  </main>
+
+  <!-- Actor Detail Modal / Workspace Drawer -->
+  <div class="modal-backdrop" x-show="showDetailModal" style="display: none;" @click.self="showDetailModal = false">
+    <div class="modal-box" x-show="showDetailModal">
+      <template x-if="selectedActor">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+            <div>
+              <span style="font-size: 0.8rem; font-weight: 700; color: var(--amber); text-transform: uppercase;">Actor Workspace</span>
+              <h2 style="font-size: 1.8rem; font-weight: 800;" x-text="selectedActor.name"></h2>
+              <p style="color: var(--text-muted); font-size: 1rem;" x-text="selectedActor.role"></p>
+            </div>
+            <button class="btn btn-secondary btn-sm" @click="showDetailModal = false">✕ Close</button>
+          </div>
+
+          <!-- Pieces Table -->
+          <div style="margin-bottom: 1.5rem;">
+            <h3 style="font-size: 1.1rem; margin-bottom: 0.75rem; color: var(--text);">Assigned Costume Pieces</h3>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <template x-for="item in selectedActor.items" :key="item.id">
+                <div style="background: var(--surface-card); border: 1px solid var(--border); border-radius: 12px; padding: 1rem;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <div>
+                      <span style="font-family: var(--font-mono); font-weight: 800; color: var(--amber); margin-right: 0.5rem;" x-text="item.id"></span>
+                      <strong style="font-size: 1.05rem;" x-text="item.type"></strong>
+                    </div>
+                    <span class="status-pill" :class="{
+                      'status-complete': item.status === 'Complete',
+                      'status-progress': item.status === 'Progress',
+                      'status-blocked': item.status === 'Blocked'
+                    }" x-text="item.status"></span>
+                  </div>
+                  <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.6rem;" x-text="item.desc"></p>
+                  
+                  <template x-if="item.blocker">
+                    <div style="background: var(--crimson-glow); border-left: 3px solid var(--crimson); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; color: #fca5a5; margin-bottom: 0.6rem;">
+                      <strong>⚠️ Blocker:</strong> <span x-text="item.blocker"></span>
+                    </div>
+                  </template>
+
+                  <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--text-muted);">
+                    <span><strong>Next:</strong> <span x-text="item.next"></span></span>
+                    <span style="font-family: var(--font-mono); font-weight: 700; color: var(--text);" x-text="`${item.pct}%`"></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <button class="btn btn-amber" @click="alert('Add item form triggered');">+ Add Piece for this Actor</button>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- New Piece Modal -->
+  <div class="modal-backdrop" x-show="showAddModal" style="display: none;" @click.self="showAddModal = false">
+    <div class="modal-box" x-show="showAddModal">
+      <h2 style="font-size: 1.6rem; font-weight: 800; margin-bottom: 1.25rem;">Add Physical Costume Piece</h2>
+      <form @submit.prevent="alert('New costume piece allocated with auto-generated ID!'); showAddModal = false;">
+        <div class="form-group">
+          <label>Actor</label>
+          <select class="form-control">
+            <option>Eleanor Vance (Lady Macbeth)</option>
+            <option>Marcus Sterling (Macbeth)</option>
+            <option>Gideon Croft (Banquo)</option>
+            <option>Clara Oswald (First Witch)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Item Type (Category)</label>
+          <input type="text" class="form-control" placeholder="e.g. Velvet Cape, Crown, Boots" required>
+        </div>
+        <div class="form-group">
+          <label>Description / Specifics</label>
+          <textarea class="form-control" rows="2" placeholder="Fabric, color, detailing, scene usage..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Initial Status</label>
+          <select class="form-control">
+            <option>Not Started (0%)</option>
+            <option>In Progress (25%)</option>
+            <option>Ready (100%)</option>
+            <option>Blocked (Need info/materials)</option>
+          </select>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem;">
+          <button type="button" class="btn btn-secondary" @click="showAddModal = false">Cancel</button>
+          <button type="submit" class="btn btn-amber">Create Piece & Auto-Assign ID</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</body>
+</html>

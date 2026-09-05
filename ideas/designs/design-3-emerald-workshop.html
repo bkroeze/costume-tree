@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Costume Tree — Emerald Workshop & Clean Slate</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --card-inner: #0f172a;
+      --border: #334155;
+      --border-subtle: #1e293b;
+      --emerald: #10b981;
+      --emerald-dark: #059669;
+      --emerald-glow: rgba(16, 185, 129, 0.2);
+      --coral: #f97316;
+      --coral-glow: rgba(249, 115, 22, 0.2);
+      --crimson: #ef4444;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --font-main: 'Plus Jakarta Sans', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-main);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Navigation */
+    header {
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+    .header-inner {
+      max-width: 1350px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+    }
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      text-decoration: none;
+      color: var(--text);
+    }
+    .brand-logo {
+      background: linear-gradient(135deg, var(--emerald), var(--emerald-dark));
+      color: #fff;
+      font-weight: 800;
+      font-size: 1.25rem;
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 15px var(--emerald-glow);
+    }
+    .prod-info h1 { font-size: 1.15rem; font-weight: 800; }
+    .prod-info p { font-size: 0.8rem; color: var(--text-muted); }
+
+    /* Button Tokens */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      padding: 0.8rem 1.6rem;
+      font-weight: 700;
+      font-size: 0.95rem;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      text-decoration: none;
+      font-family: var(--font-main);
+    }
+    .btn-emerald {
+      background: var(--emerald);
+      color: #064e3b;
+      box-shadow: 0 4px 14px var(--emerald-glow);
+      font-weight: 800;
+    }
+    .btn-emerald:hover {
+      background: #34d399;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+    }
+    .btn-coral {
+      background: var(--coral);
+      color: #fff;
+      box-shadow: 0 4px 14px var(--coral-glow);
+      font-weight: 800;
+    }
+    .btn-coral:hover {
+      background: #fb923c;
+      transform: translateY(-2px);
+    }
+    .btn-outline {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--text);
+    }
+    .btn-outline:hover {
+      background: var(--border);
+    }
+    .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.85rem; border-radius: 8px; }
+
+    main {
+      flex: 1;
+      max-width: 1350px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    /* Rollup Dashboard Header */
+    .dashboard-hero {
+      display: grid;
+      grid-template-columns: 2fr 3fr;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .hero-summary-card {
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 1.75rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .hero-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+    .hero-stat {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.25rem 1.4rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .stat-caption { font-size: 0.8rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); letter-spacing: 0.05em; }
+    .stat-val-big { font-family: var(--font-mono); font-size: 2.25rem; font-weight: 800; margin: 0.4rem 0; line-height: 1; }
+
+    /* View Switcher & Filter Toolbar */
+    .action-toolbar {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.75rem;
+    }
+    .search-box {
+      display: flex;
+      align-items: center;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.45rem 0.9rem;
+      gap: 0.6rem;
+      flex: 1;
+      max-width: 450px;
+    }
+    .search-box:focus-within { border-color: var(--emerald); }
+    .search-box input {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 0.95rem;
+      width: 100%;
+      outline: none;
+      font-family: var(--font-main);
+    }
+    .view-toggles {
+      display: flex;
+      gap: 0.4rem;
+      background: var(--card-inner);
+      padding: 0.25rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .view-toggle-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.4rem 0.9rem;
+      font-weight: 700;
+      font-size: 0.85rem;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .view-toggle-btn.active {
+      background: var(--card-bg);
+      color: var(--text);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    /* Actors List Table View */
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+    }
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+    table.data-table th {
+      background: #131d31;
+      padding: 1rem 1.25rem;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      font-weight: 700;
+      border-bottom: 1px solid var(--border);
+    }
+    table.data-table td {
+      padding: 1.2rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    table.data-table tr:last-child td { border-bottom: none; }
+    table.data-table tr:hover { background: rgba(255, 255, 255, 0.02); }
+
+    /* Actor Card View */
+    .actors-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 1.5rem;
+    }
+    .actor-atelier-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 1.25rem;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .actor-atelier-card:hover {
+      border-color: var(--emerald);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .pill-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+    }
+    .pill-emerald { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .pill-coral { background: rgba(249, 115, 22, 0.15); color: #fdba74; border: 1px solid rgba(249, 115, 22, 0.3); }
+    .pill-crimson { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    /* Modal / Drawer */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      padding: 1rem;
+    }
+    .modal-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 650px;
+      padding: 2rem;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+    }
+    .form-group { margin-bottom: 1.25rem; }
+    .form-group label { display: block; font-weight: 700; font-size: 0.85rem; margin-bottom: 0.4rem; color: var(--text-muted); }
+    .form-input {
+      width: 100%;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      color: var(--text);
+      font-family: var(--font-main);
+      font-size: 1rem;
+    }
+    .form-input:focus { outline: none; border-color: var(--emerald); }
+
+    @media (max-width: 900px) {
+      .dashboard-hero { grid-template-columns: 1fr; }
+      .hero-stats-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body x-data="{
+  viewMode: 'grid', // 'grid' or 'table'
+  searchQuery: '',
+  showAddModal: false,
+  selectedActor: null,
+  showDetailDrawer: false,
+  actors: [
+    { id: 1, name: 'Eleanor Vance', role: 'Lady Macbeth', pieces: 5, complete: 4, blocked: 1, pct: 85, items: [
+      { id: 'C-0001', type: 'Velvet Gown', desc: 'Blood red heavy velvet', status: 'In Progress', pct: 80, next: 'Hem line adjustment' },
+      { id: 'C-0002', type: 'Crown / Tiara', desc: 'Antique brass with obsidian stones', status: 'Blocked', pct: 40, blocker: 'Missing obsidian cabochons from vendor', next: 'Awaiting stone shipment' },
+      { id: 'C-0003', type: 'Dagger Sheath', desc: 'Hidden undergarment holster', status: 'Complete', pct: 100, next: 'Ready in dressing room' },
+      { id: 'C-0004', type: 'Silk Robe', desc: 'Sleepwalking scene sheer silk', status: 'Complete', pct: 100, next: 'Pressed and bagged' },
+      { id: 'C-0005', type: 'Velvet Cape', desc: 'Ermine trim winter mantle', status: 'Complete', pct: 100, next: 'Complete' }
+    ]},
+    { id: 2, name: 'Marcus Sterling', role: 'Macbeth', pieces: 6, complete: 5, blocked: 0, pct: 92, items: [
+      { id: 'C-0006', type: 'Tunic & Armor', desc: 'Studded leather battle cuirass', status: 'Complete', pct: 100, next: 'Final fitting approved' },
+      { id: 'C-0007', type: 'High Boots', desc: 'Knee-high distress brown leather', status: 'Complete', pct: 100, next: 'Waterproofed' },
+      { id: 'C-0008', type: 'Coronation Mantle', desc: 'Gold embroidered crimson wool', status: 'In Progress', pct: 75, next: 'Embroidery on collar' },
+      { id: 'C-0009', type: 'Claymore Scabbard', desc: 'Broadsword back-strap', status: 'Complete', pct: 100, next: 'Ready' },
+      { id: 'C-0010', type: 'Banqueting Tunic', desc: 'Dark green patterned silk', status: 'Complete', pct: 100, next: 'Ready' },
+      { id: 'C-0011', type: 'Ring Set', desc: 'Thane signet ring replica', status: 'Complete', pct: 100, next: 'In prop box A' }
+    ]},
+    { id: 3, name: 'Gideon Croft', role: 'Banquo', pieces: 4, complete: 1, blocked: 2, pct: 45, items: [
+      { id: 'C-0012', type: 'Ghost Shroud', desc: 'Distressed tattered gray linen', status: 'Blocked', pct: 30, blocker: 'Wash test failed; staining base tunic', next: 'Need theatrical blood dye test' },
+      { id: 'C-0013', type: 'Chainmail Hauberk', desc: 'Lightweight aluminum links', status: 'Blocked', pct: 20, blocker: 'Pinched neck closure', next: 'Resize shoulders' },
+      { id: 'C-0014', type: 'Leather Bracers', desc: 'Cross-stitched forearms', status: 'Complete', pct: 100, next: 'Ready' },
+      { id: 'C-0015', type: 'Riding Cloak', desc: 'Waxed heavy wool', status: 'In Progress', pct: 60, next: 'Attach toggle clasp' }
+    ]},
+    { id: 4, name: 'Clara Oswald', role: 'First Witch', pieces: 3, complete: 3, blocked: 0, pct: 100, items: [
+      { id: 'C-0016', type: 'Ragged Tattered Robe', desc: 'Layered cheesecloth & raw linen', status: 'Complete', pct: 100, next: 'Complete' },
+      { id: 'C-0017', type: 'Bone Necklace', desc: 'Resin cast animal bones', status: 'Complete', pct: 100, next: 'Complete' },
+      { id: 'C-0018', type: 'Muddy Footwraps', desc: 'Reinforced burlap gaiters', status: 'Complete', pct: 100, next: 'Complete' }
+    ]}
+  ],
+  filteredActors() {
+    return this.actors.filter(a => {
+      return a.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+             a.role.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+             a.items.some(i => i.id.toLowerCase().includes(this.searchQuery.toLowerCase()) || i.type.toLowerCase().includes(this.searchQuery.toLowerCase()));
+    });
+  },
+  openActor(actor) {
+    this.selectedActor = actor;
+    this.showDetailDrawer = true;
+  }
+}">
+
+  <header>
+    <div class="header-inner">
+      <a href="index.html" class="brand-wrap">
+        <div class="brand-logo">CT</div>
+        <div class="prod-info">
+          <h1>Macbeth — Mainstage Production</h1>
+          <p>4 Cast Members &bull; 18 Physical Pieces</p>
+        </div>
+      </a>
+      <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <a href="index.html" class="btn btn-outline btn-sm">◂ Back to Gallery</a>
+        <button class="btn btn-emerald" @click="showAddModal = true">+ Add Costume Piece</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Rollup Dashboard Header -->
+    <section class="dashboard-hero">
+      <div class="hero-summary-card">
+        <div>
+          <span style="font-size: 0.8rem; font-weight: 700; color: var(--emerald); text-transform: uppercase;">Production Readiness</span>
+          <div style="display: flex; align-items: baseline; gap: 1rem; margin: 0.5rem 0 1rem;">
+            <span style="font-family: var(--font-mono); font-size: 3.5rem; font-weight: 800; line-height: 1; color: var(--emerald);">78%</span>
+            <span style="color: var(--text-muted); font-weight: 600;">Overall Complete</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 0.95rem;">13 of 18 costume items ready for dress rehearsal. 3 pieces require immediate blocker resolution.</p>
+        </div>
+        <div style="margin-top: 1.5rem; display: flex; gap: 0.75rem;">
+          <button class="btn btn-coral btn-sm" @click="searchQuery = 'Blocked'">🚨 View 3 Blocked Pieces</button>
+          <button class="btn btn-outline btn-sm" @click="searchQuery = ''">Reset Filters</button>
+        </div>
+      </div>
+
+      <div class="hero-stats-grid">
+        <div class="hero-stat">
+          <div class="stat-caption">Total Pieces</div>
+          <div class="stat-val-big" style="color: #60a5fa;">18</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted);">Across 4 actors</div>
+        </div>
+        <div class="hero-stat">
+          <div class="stat-caption">Ready / Complete</div>
+          <div class="stat-val-big" style="color: var(--emerald);">13</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted);">72% completed</div>
+        </div>
+        <div class="hero-stat">
+          <div class="stat-caption">Blocked Exceptions</div>
+          <div class="stat-val-big" style="color: var(--crimson);">3</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted);">2 actors affected</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Toolbar -->
+    <div class="action-toolbar">
+      <div class="search-box">
+        <span style="color: var(--text-muted);">🔍</span>
+        <input type="text" placeholder="Search piece ID (e.g. C-0001), actor name, or garment type..." x-model="searchQuery">
+      </div>
+
+      <div class="view-toggles">
+        <button class="view-toggle-btn" :class="{ 'active': viewMode === 'grid' }" @click="viewMode = 'grid'">Card Grid</button>
+        <button class="view-toggle-btn" :class="{ 'active': viewMode === 'table' }" @click="viewMode = 'table'">Compact Table</button>
+      </div>
+    </div>
+
+    <!-- Grid View -->
+    <section class="actors-grid" x-show="viewMode === 'grid'">
+      <template x-for="actor in filteredActors()" :key="actor.id">
+        <div class="actor-atelier-card" @click="openActor(actor)">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+              <div>
+                <h3 style="font-size: 1.3rem; font-weight: 800;" x-text="actor.name"></h3>
+                <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 600;" x-text="actor.role"></span>
+              </div>
+              <template x-if="actor.blocked > 0">
+                <span class="pill-badge pill-crimson" x-text="`${actor.blocked} Blocked`"></span>
+              </template>
+              <template x-if="actor.blocked === 0 && actor.pct === 100">
+                <span class="pill-badge pill-emerald">100% Ready</span>
+              </template>
+            </div>
+
+            <div style="margin: 1.25rem 0;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.4rem;">
+                <span style="color: var(--text-muted);">Garment Progress</span>
+                <span style="font-family: var(--font-mono); font-weight: 800; color: var(--emerald);" x-text="`${actor.pct}%`"></span>
+              </div>
+              <div style="height: 8px; background: var(--card-inner); border-radius: 9999px; overflow: hidden;">
+                <div :style="`width: ${actor.pct}%; height: 100%; background: var(--emerald); border-radius: 9999px;`"></div>
+              </div>
+            </div>
+
+            <!-- Pieces Mini Chips -->
+            <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1rem;">
+              <template x-for="item in actor.items" :key="item.id">
+                <span class="pill-badge" :class="{
+                  'pill-emerald': item.status === 'Complete',
+                  'pill-coral': item.status === 'In Progress',
+                  'pill-crimson': item.status === 'Blocked'
+                }" x-text="`${item.id} ${item.type}`"></span>
+              </template>
+            </div>
+          </div>
+
+          <div style="border-top: 1px solid var(--border); padding-top: 0.9rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--text-muted);">
+            <span><strong style="color: var(--text);" x-text="actor.pieces"></strong> assigned pieces</span>
+            <span style="color: var(--emerald); font-weight: 700;">Open Workspace &rarr;</span>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <!-- Table View -->
+    <section class="table-container" x-show="viewMode === 'table'">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Actor / Role</th>
+            <th>Pieces</th>
+            <th>Ready</th>
+            <th>Blocked</th>
+            <th>Progress Rollup</th>
+            <th style="text-align: right;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="actor in filteredActors()" :key="actor.id">
+            <tr style="cursor: pointer;" @click="openActor(actor)">
+              <td>
+                <div style="font-weight: 800; font-size: 1.05rem;" x-text="actor.name"></div>
+                <div style="font-size: 0.85rem; color: var(--text-muted);" x-text="actor.role"></div>
+              </td>
+              <td><span style="font-family: var(--font-mono); font-weight: 700;" x-text="actor.pieces"></span></td>
+              <td><span style="font-family: var(--font-mono); font-weight: 700; color: var(--emerald);" x-text="actor.complete"></span></td>
+              <td>
+                <template x-if="actor.blocked > 0">
+                  <span class="pill-badge pill-crimson" x-text="actor.blocked"></span>
+                </template>
+                <template x-if="actor.blocked === 0">
+                  <span style="color: var(--text-muted);">&mdash;</span>
+                </template>
+              </td>
+              <td style="min-width: 180px;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                  <div style="flex: 1; height: 8px; background: var(--card-inner); border-radius: 9999px; overflow: hidden;">
+                    <div :style="`width: ${actor.pct}%; height: 100%; background: var(--emerald); border-radius: 9999px;`"></div>
+                  </div>
+                  <span style="font-family: var(--font-mono); font-weight: 800; font-size: 0.9rem;" x-text="`${actor.pct}%`"></span>
+                </div>
+              </td>
+              <td style="text-align: right;">
+                <button class="btn btn-outline btn-sm">Workspace &rarr;</button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <!-- Actor Detail Drawer / Modal -->
+  <div class="modal-backdrop" x-show="showDetailDrawer" style="display: none;" @click.self="showDetailDrawer = false">
+    <div class="modal-card" x-show="showDetailDrawer">
+      <template x-if="selectedActor">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+            <div>
+              <span style="font-size: 0.8rem; font-weight: 700; color: var(--emerald); text-transform: uppercase;">Actor Costume Roster</span>
+              <h2 style="font-size: 1.8rem; font-weight: 800;" x-text="selectedActor.name"></h2>
+              <p style="color: var(--text-muted); font-size: 0.95rem;" x-text="selectedActor.role"></p>
+            </div>
+            <button class="btn btn-outline btn-sm" @click="showDetailDrawer = false">✕</button>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem;">
+            <template x-for="item in selectedActor.items" :key="item.id">
+              <div style="background: var(--card-inner); border: 1px solid var(--border); border-radius: 12px; padding: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                  <div>
+                    <span style="font-family: var(--font-mono); font-weight: 800; color: var(--emerald); margin-right: 0.5rem;" x-text="item.id"></span>
+                    <strong style="font-size: 1.05rem;" x-text="item.type"></strong>
+                  </div>
+                  <span class="pill-badge" :class="{
+                    'pill-emerald': item.status === 'Complete',
+                    'pill-coral': item.status === 'In Progress',
+                    'pill-crimson': item.status === 'Blocked'
+                  }" x-text="item.status"></span>
+                </div>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem;" x-text="item.desc"></p>
+                
+                <template x-if="item.blocker">
+                  <div style="background: rgba(239, 68, 68, 0.1); border-left: 3px solid var(--crimson); padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.8rem; color: #fca5a5; margin-bottom: 0.5rem;">
+                    <strong>Blocker:</strong> <span x-text="item.blocker"></span>
+                  </div>
+                </template>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--text-muted);">
+                  <span>Next Action: <strong style="color: var(--text);" x-text="item.next"></strong></span>
+                  <span style="font-family: var(--font-mono); font-weight: 700; color: var(--emerald);" x-text="`${item.pct}%`"></span>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 1rem;">
+            <button class="btn btn-emerald">+ Add Piece for Actor</button>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- Add Modal -->
+  <div class="modal-backdrop" x-show="showAddModal" style="display: none;" @click.self="showAddModal = false">
+    <div class="modal-card" x-show="showAddModal">
+      <h2 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 1.25rem;">Create Physical Costume Piece</h2>
+      <form @submit.prevent="alert('Piece created with allocated ID!'); showAddModal = false;">
+        <div class="form-group">
+          <label>Assign to Actor</label>
+          <select class="form-input">
+            <option>Eleanor Vance (Lady Macbeth)</option>
+            <option>Marcus Sterling (Macbeth)</option>
+            <option>Gideon Croft (Banquo)</option>
+            <option>Clara Oswald (First Witch)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Category / Item Type</label>
+          <input type="text" class="form-input" placeholder="e.g. Silk Robe, Armor, Boots" required>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea class="form-input" rows="2" placeholder="Fabric details, color, fit specifications..."></textarea>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem;">
+          <button type="button" class="btn btn-outline" @click="showAddModal = false">Cancel</button>
+          <button type="submit" class="btn btn-emerald">Create Piece</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</body>
+</html>
