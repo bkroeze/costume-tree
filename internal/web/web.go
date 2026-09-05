@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strings"
 )
 
 //go:embed templates/*.html assets/*
@@ -40,6 +41,16 @@ func (e *Error) Unwrap() error {
 	return e.Err
 }
 
+type demoState struct {
+	Error   string
+	Success string
+}
+
+type pageModel struct {
+	Title string
+	Demo  demoState
+}
+
 // New constructs the application HTTP handler from embedded content.
 // A readiness dependency may be supplied by the composition root. Omitting it
 // preserves the no-database scaffold and reports the process as healthy.
@@ -60,14 +71,14 @@ func New(logger *slog.Logger, readiness ...Readiness) (http.Handler, error) {
 		return nil, fmt.Errorf("web: open embedded assets: %w", err)
 	}
 
-	server := &server{logger: logger}
+	server := &server{logger: logger, pages: pages}
 	if len(readiness) == 1 {
 		server.readiness = readiness[0]
 	}
-	server.pages = pages
 	mux := http.NewServeMux()
 	mux.Handle("GET /assets/", cacheAssets(http.StripPrefix("/assets/", http.FileServer(http.FS(assets)))))
 	mux.Handle("GET /{$}", server.handle("home", server.home))
+	mux.Handle("POST /demo", server.handle("demo", server.demo))
 	mux.HandleFunc("GET /healthz", server.health)
 	return mux, nil
 }
@@ -79,13 +90,43 @@ type server struct {
 }
 
 func (s *server) home(w http.ResponseWriter, _ *http.Request) error {
+	return s.renderPage(w, http.StatusOK, pageModel{Title: "Costume Tree"})
+}
+
+func (s *server) demo(w http.ResponseWriter, r *http.Request) error {
+	if err := r.ParseForm(); err != nil {
+		return &Error{Status: http.StatusBadRequest, Message: "Unable to read the form.", Err: fmt.Errorf("parse demo form: %w", err)}
+	}
+
+	state := demoState{}
+	if strings.TrimSpace(r.FormValue("piece")) == "" {
+		state.Error = "Enter a piece name before submitting."
+	} else {
+		state.Success = "Preview saved. The piece is ready for inventory storage."
+	}
+
+	status := http.StatusOK
+	if state.Error != "" {
+		status = http.StatusUnprocessableEntity
+	}
+	if IsHTMX(r) {
+		if state.Success != "" {
+			SetTrigger(w, "demo:submitted")
+		}
+		return RenderFragment(w, s.pages, "demo-feedback", status, pageModel{Title: "Costume Tree", Demo: state})
+	}
+	return s.renderPage(w, status, pageModel{Title: "Costume Tree", Demo: state})
+}
+
+func (s *server) renderPage(w http.ResponseWriter, status int, model pageModel) error {
 	var page bytes.Buffer
-	if err := s.pages.ExecuteTemplate(&page, "layout", struct{ Title string }{Title: "Costume Tree"}); err != nil {
-		return &Error{Status: http.StatusInternalServerError, Message: "Unable to render the page.", Err: fmt.Errorf("render home: %w", err)}
+	if err := s.pages.ExecuteTemplate(&page, "layout", model); err != nil {
+		return &Error{Status: http.StatusInternalServerError, Message: "Unable to render the page.", Err: fmt.Errorf("render page: %w", err)}
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
 	_, err := page.WriteTo(w)
 	return err
 }

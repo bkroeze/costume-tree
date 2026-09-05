@@ -702,6 +702,25 @@ h3 {
   border-top: 2px dashed #bbc4d0;
   padding-top: 1rem;
 }
+
+.form-feedback {
+  margin: 0 0 1rem;
+  border: 2px solid var(--border);
+  padding: 0.7rem 0.8rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.form-feedback--error {
+  background: var(--coral-soft);
+  color: #7f1d1d;
+}
+
+.form-feedback--success {
+  background: var(--mint);
+  color: #14532d;
+}
 .status-legend {
   display: flex;
   flex-wrap: wrap;

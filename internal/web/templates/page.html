@@ -7,6 +7,8 @@
   <meta name="description" content="Costume Tree wardrobe operations workspace">
   <title>{{.Title}}</title>
   <link rel="stylesheet" href="/assets/app.css">
+  <script src="/assets/htmx.min.js" defer></script>
+  <script src="/assets/alpine.min.js" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -160,7 +162,8 @@
         </div>
         <p>Large, keyboard-friendly fields keep backstage updates quick.</p>
       </div>
-      <form class="form-card" action="/" method="get">
+      <form class="form-card" action="/demo" method="post" hx-post="/demo" hx-target="#demo-feedback" hx-swap="innerHTML">
+        <div id="demo-feedback" class="form-feedback" aria-live="polite">{{template "demo-feedback" .}}</div>
         <div class="form-grid">
           <div class="field-stack">
             <label for="piece-name">Piece name</label>
@@ -184,7 +187,7 @@
           </div>
         </div>
         <div class="form-actions">
-          <p class="form-note">Preview only — submission is intentionally inert until inventory storage is connected.</p>
+          <p class="form-note">Progressive enhancement keeps this form useful with or without JavaScript.</p>
           <button class="btn-brutal btn-cobalt" type="submit">Preview submission</button>
         </div>
       </form>
@@ -194,4 +197,11 @@
   <footer class="site-footer">Costume Tree / backstage clarity, one piece at a time.</footer>
 </body>
 </html>
+{{- end}}
+{{define "demo-feedback" -}}
+  {{- if .Demo.Error -}}
+    <p class="form-feedback form-feedback--error" role="alert">{{.Demo.Error}}</p>
+  {{- else if .Demo.Success -}}
+    <p class="form-feedback form-feedback--success" role="status">{{.Demo.Success}}</p>
+  {{- end -}}
 {{- end}}

@@ -97,3 +97,70 @@ func TestHealthzReflectsDatabaseReadiness(t *testing.T) {
 		}
 	})
 }
+
+func TestDemoFormSupportsFullPageAndHTMXResponses(t *testing.T) {
+	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	t.Run("full page validation error", func(t *testing.T) {
+		request := httptest.NewRequest(http.MethodPost, "/demo", strings.NewReader("piece="))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+
+		if response.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want %d", response.Code, http.StatusUnprocessableEntity)
+		}
+		body := response.Body.String()
+		if !strings.Contains(body, "Enter a piece name") {
+			t.Errorf("body lacks validation error: %s", body)
+		}
+		if !strings.Contains(body, "<html") {
+			t.Errorf("full-page response lacks document shell: %s", body)
+		}
+	})
+
+	t.Run("HTMX success fragment", func(t *testing.T) {
+		request := httptest.NewRequest(http.MethodPost, "/demo", strings.NewReader("piece=Velvet+cape"))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request.Header.Set("HX-Request", "true")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+
+		if response.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+		}
+		if trigger := response.Header().Get("HX-Trigger"); trigger != "demo:submitted" {
+			t.Errorf("HX-Trigger = %q, want demo:submitted", trigger)
+		}
+		body := response.Body.String()
+		if !strings.Contains(body, "Preview saved") {
+			t.Errorf("body lacks success message: %s", body)
+		}
+		if strings.Contains(body, "<html") {
+			t.Errorf("HTMX response unexpectedly contains document shell: %s", body)
+		}
+	})
+}
+
+func TestVendorAssetsAreEmbedded(t *testing.T) {
+	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	for _, asset := range []string{"htmx.min.js", "alpine.min.js"} {
+		t.Run(asset, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, "/assets/"+asset, nil)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+			}
+			if response.Body.Len() < 1000 {
+				t.Fatalf("embedded asset is unexpectedly small: %d bytes", response.Body.Len())
+			}
+		})
+	}
+}
