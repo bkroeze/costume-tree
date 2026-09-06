@@ -45,14 +45,14 @@
         <p class="kpi-sub">Awaiting inventory</p>
       </article>
       <article class="kpi-card highlight-mint">
-        <p class="kpi-title">Ready &amp; complete</p>
+        <p class="kpi-title">Complete</p>
         <strong class="kpi-val" aria-label="No data">—</strong>
         <p class="kpi-sub">No completion data yet</p>
       </article>
       <article class="kpi-card highlight-yellow">
-        <p class="kpi-title">In progress</p>
+        <p class="kpi-title">Active work</p>
         <strong class="kpi-val" aria-label="No data">—</strong>
-        <p class="kpi-sub">Workshop activity will show here</p>
+        <p class="kpi-sub">Make, fit, and alteration work will show here</p>
       </article>
       <article class="kpi-card highlight-coral">
         <p class="kpi-title">Blocked work</p>
@@ -75,9 +75,11 @@
           <span class="field-label">Status</span>
           <select class="select-brutal" name="status">
             <option value="">All statuses</option>
-            <option value="ready">Ready</option>
-            <option value="progress">In progress</option>
-            <option value="blocked">Blocked</option>
+            <option value="Find">Find</option>
+            <option value="Make">Make</option>
+            <option value="Fit">Fit</option>
+            <option value="Alterations">Alterations</option>
+            <option value="Complete">Complete</option>
           </select>
         </label>
         <button class="btn-brutal btn-white btn-sm" type="submit">Apply filters</button>
@@ -119,9 +121,11 @@
             </div>
             <div class="status-legend" aria-label="Status palette preview">
               <span class="status-legend-label">Status palette</span>
-              <span class="status-brutal status-done">Ready</span>
-              <span class="status-brutal status-prog">In progress</span>
-              <span class="status-brutal status-block">Blocked</span>
+              <span class="status-brutal status-example">Find</span>
+              <span class="status-brutal status-prog">Make</span>
+              <span class="status-brutal status-prog">Fit</span>
+              <span class="status-brutal status-block">Alterations</span>
+              <span class="status-brutal status-done">Complete</span>
             </div>
             <div class="pieces-grid">
               <article class="piece-card-brutal">
@@ -176,9 +180,11 @@
           <div class="field-stack">
             <label for="piece-status">Starting status</label>
             <select class="select-brutal" id="piece-status" name="starting-status">
-              <option value="progress">In progress</option>
-              <option value="ready">Ready</option>
-              <option value="blocked">Blocked</option>
+              <option value="Find">Find</option>
+              <option value="Make">Make</option>
+              <option value="Fit">Fit</option>
+              <option value="Alterations">Alterations</option>
+              <option value="Complete">Complete</option>
             </select>
           </div>
           <div class="field-stack">

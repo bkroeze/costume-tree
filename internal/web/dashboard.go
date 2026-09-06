@@ -23,6 +23,7 @@ type DashboardPageModel struct {
 	Production storage.Production
 	KPIs       storage.ProductionKPIs
 	Actors     []storage.ActorSummary
+	Statuses   []string
 	Empty      bool
 	Error      string
 }
@@ -37,6 +38,7 @@ type WorkspaceItemView struct {
 	Progress    int
 	NextAction  string
 	Blocker     string
+	Blocked     bool
 	Notes       string
 	UpdatedAt   string
 }
@@ -116,7 +118,7 @@ func (h *DashboardHandler) Dashboard(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return dashboardStorageError("load dashboard actor summaries", err)
 	}
-	model := DashboardPageModel{Title: "Dashboard · " + production.Name, Production: production, KPIs: kpis, Actors: actors, Empty: len(actors) == 0}
+	model := DashboardPageModel{Title: "Dashboard · " + production.Name, Production: production, KPIs: kpis, Actors: actors, Statuses: costumeItemStatuses, Empty: len(actors) == 0}
 	return h.render(w, r, http.StatusOK, "dashboard-page", "dashboard-content", model)
 }
 
@@ -257,7 +259,7 @@ func (h *DashboardHandler) renderWorkspace(w http.ResponseWriter, r *http.Reques
 	model.Statuses = costumeItemStatuses
 	model.Items = make([]WorkspaceItemView, 0, len(items))
 	for _, item := range items {
-		model.Items = append(model.Items, WorkspaceItemView{ID: item.ID, Code: item.Code, Description: item.Description, Status: item.Status, Progress: item.Progress, NextAction: item.NextAction, Blocker: item.Blocker, Notes: item.Notes, UpdatedAt: formatUpdatedAt(item.UpdatedAt)})
+		model.Items = append(model.Items, WorkspaceItemView{ID: item.ID, Code: item.Code, Description: item.Description, Status: item.Status, Progress: item.Progress, NextAction: item.NextAction, Blocker: item.Blocker, Blocked: strings.TrimSpace(item.Blocker) != "", Notes: item.Notes, UpdatedAt: formatUpdatedAt(item.UpdatedAt)})
 	}
 	model.Empty = len(model.Items) == 0
 	return h.render(w, r, status, "workspace-page", "workspace-content", model)

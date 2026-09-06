@@ -123,8 +123,7 @@ func (q *ItemSearch) Search(ctx context.Context, filter ItemSearchFilter) ([]Ite
 		args = append(args, status)
 	}
 	if filter.Blocked {
-		query += ` AND ci.status = ?`
-		args = append(args, StatusBlocked)
+		query += ` AND length(trim(ci.blocker)) > 0`
 	}
 	if filter.Incomplete {
 		query += ` AND ci.status <> ?`

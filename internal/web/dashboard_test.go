@@ -42,7 +42,7 @@ func dashboardFixture(t *testing.T) (*DashboardHandler, storage.Production, stor
 	if err != nil {
 		t.Fatal(err)
 	}
-	item, err := items.Create(ctx, storage.CreateCostumeItemInput{ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: typ.ID, Status: storage.StatusInProgress, Progress: 25})
+	item, err := items.Create(ctx, storage.CreateCostumeItemInput{ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: typ.ID, Status: storage.StatusMake, Progress: 25, Blocker: "Waiting for fabric"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,6 +56,28 @@ func dashboardRequest(method, target string, values url.Values) *http.Request {
 	return request
 }
 
+func assertWorkflowStatusOptions(t *testing.T, body string) {
+	t.Helper()
+	offset := 0
+	for _, status := range []string{storage.StatusFind, storage.StatusMake, storage.StatusFit, storage.StatusAlterations, storage.StatusComplete} {
+		token := `<option value="` + status + `"`
+		index := strings.Index(body[offset:], token)
+		if index < 0 {
+			t.Fatalf("status option %q missing or out of order in %s", status, body)
+		}
+		offset += index + len(token)
+	}
+	choiceCount := strings.Count(body, `<option value="`) - strings.Count(body, `<option value="">`)
+	if choiceCount != 5 {
+		t.Fatalf("status choice count = %d in %s", choiceCount, body)
+	}
+	for _, oldStatus := range []string{"Not Started", "In Progress", "Blocked", "Ready"} {
+		if strings.Contains(body, `<option value="`+oldStatus+`"`) {
+			t.Fatalf("old status option %q present in %s", oldStatus, body)
+		}
+	}
+}
+
 func TestDashboardAndWorkspaceRenderActiveData(t *testing.T) {
 	h, production, actor, _, cleanup := dashboardFixture(t)
 	defer cleanup()
@@ -63,23 +85,30 @@ func TestDashboardAndWorkspaceRenderActiveData(t *testing.T) {
 	if err := h.Dashboard(response, httptest.NewRequest(http.MethodGet, "/production/"+strconv.FormatInt(production.ID, 10)+"/dashboard", nil)); err != nil {
 		t.Fatal(err)
 	}
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Macbeth dashboard") || !strings.Contains(response.Body.String(), "Ada") || !strings.Contains(response.Body.String(), "25%") {
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Macbeth dashboard") || !strings.Contains(response.Body.String(), "Ada") || !strings.Contains(response.Body.String(), "25%") || !strings.Contains(response.Body.String(), "Blocked by notes: 1") {
 		t.Fatalf("dashboard response = %d %s", response.Code, response.Body.String())
+	}
+	assertWorkflowStatusOptions(t, response.Body.String())
+	for _, label := range []string{"Total", "Complete", "Active work", "Blocked"} {
+		if !strings.Contains(response.Body.String(), `<p class="kpi-title">`+label+`</p>`) {
+			t.Fatalf("KPI %q missing in %s", label, response.Body.String())
+		}
 	}
 	workspace := httptest.NewRecorder()
 	if err := h.Workspace(workspace, httptest.NewRequest(http.MethodGet, "/production/"+strconv.FormatInt(production.ID, 10)+"/workspace/"+strconv.FormatInt(actor.ID, 10), nil)); err != nil {
 		t.Fatal(err)
 	}
-	if workspace.Code != http.StatusOK || !strings.Contains(workspace.Body.String(), "C-0001") || !strings.Contains(workspace.Body.String(), "25") {
+	if workspace.Code != http.StatusOK || !strings.Contains(workspace.Body.String(), "C-0001") || !strings.Contains(workspace.Body.String(), "25") || !strings.Contains(workspace.Body.String(), "Waiting for fabric") {
 		t.Fatalf("workspace response = %d %s", workspace.Code, workspace.Body.String())
 	}
+	assertWorkflowStatusOptions(t, workspace.Body.String())
 }
 
 func TestWorkspaceRejectsStaleTimestampAndUpdatesStatus(t *testing.T) {
 	h, production, actor, item, cleanup := dashboardFixture(t)
 	defer cleanup()
 	path := "/production/" + strconv.FormatInt(production.ID, 10) + "/workspace/" + strconv.FormatInt(actor.ID, 10)
-	stale := dashboardRequest(http.MethodPost, path, url.Values{"item_id": {strconv.FormatInt(item.ID, 10)}, "updated_at": {"2000-01-01T00:00:00Z"}, "status": {storage.StatusBlocked}, "progress": {"10"}})
+	stale := dashboardRequest(http.MethodPost, path, url.Values{"item_id": {strconv.FormatInt(item.ID, 10)}, "updated_at": {"2000-01-01T00:00:00Z"}, "status": {storage.StatusAlterations}, "progress": {"10"}})
 	response := httptest.NewRecorder()
 	if err := h.Workspace(response, stale); err != nil {
 		t.Fatal(err)
@@ -88,13 +117,46 @@ func TestWorkspaceRejectsStaleTimestampAndUpdatesStatus(t *testing.T) {
 		t.Fatalf("stale response = %d %s", response.Code, response.Body.String())
 	}
 	current := item.UpdatedAt.UTC().Format(time.RFC3339Nano)
-	updated := dashboardRequest(http.MethodPost, path, url.Values{"item_id": {strconv.FormatInt(item.ID, 10)}, "updated_at": {current}, "status": {storage.StatusBlocked}, "progress": {"10"}})
+	updated := dashboardRequest(http.MethodPost, path, url.Values{"item_id": {strconv.FormatInt(item.ID, 10)}, "updated_at": {current}, "status": {storage.StatusAlterations}, "progress": {"10"}})
 	response = httptest.NewRecorder()
 	if err := h.Workspace(response, updated); err != nil {
 		t.Fatal(err)
 	}
 	if response.Code != http.StatusSeeOther || response.Header().Get("Location") != path {
 		t.Fatalf("update response = %d location %q", response.Code, response.Header().Get("Location"))
+	}
+	saved, err := h.items.Get(context.Background(), production.ID, item.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Status != storage.StatusAlterations || saved.Blocker != "Waiting for fabric" {
+		t.Fatalf("updated item = %#v", saved)
+	}
+}
+
+func TestWorkspaceRequiresFullProgressForComplete(t *testing.T) {
+	h, production, actor, item, cleanup := dashboardFixture(t)
+	defer cleanup()
+	path := "/production/" + strconv.FormatInt(production.ID, 10) + "/workspace/" + strconv.FormatInt(actor.ID, 10)
+	request := dashboardRequest(http.MethodPost, path, url.Values{
+		"item_id":    {strconv.FormatInt(item.ID, 10)},
+		"updated_at": {item.UpdatedAt.UTC().Format(time.RFC3339Nano)},
+		"status":     {storage.StatusComplete},
+		"progress":   {"99"},
+	})
+	response := httptest.NewRecorder()
+	if err := h.Workspace(response, request); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "Complete items must be at 100%.") {
+		t.Fatalf("complete response = %d %s", response.Code, response.Body.String())
+	}
+	saved, err := h.items.Get(context.Background(), production.ID, item.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Status != storage.StatusMake {
+		t.Fatalf("status after rejected update = %q", saved.Status)
 	}
 }
 

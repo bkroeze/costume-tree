@@ -293,7 +293,7 @@ func boolQuery(value string) (bool, error) {
 
 func validSearchStatus(status string) bool {
 	switch status {
-	case storage.StatusNotStarted, storage.StatusInProgress, storage.StatusBlocked, storage.StatusReady, storage.StatusComplete:
+	case storage.StatusFind, storage.StatusMake, storage.StatusFit, storage.StatusAlterations, storage.StatusComplete:
 		return true
 	}
 	return false

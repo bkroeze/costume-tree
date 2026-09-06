@@ -46,8 +46,8 @@ CREATE TABLE costume_items (
     item_type_id INTEGER NOT NULL,
     code TEXT NOT NULL CHECK (length(trim(code)) > 0),
     description TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'Not Started'
-        CHECK (status IN ('Not Started', 'In Progress', 'Blocked', 'Ready', 'Complete')),
+    status TEXT NOT NULL DEFAULT 'Find'
+        CHECK (status IN ('Find', 'Make', 'Fit', 'Alterations', 'Complete')),
     progress INTEGER NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
     next_action TEXT NOT NULL DEFAULT '',
     blocker      TEXT NOT NULL DEFAULT '',

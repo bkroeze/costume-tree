@@ -160,7 +160,7 @@ func costumeItemMultipartRequest(t *testing.T, method, path string, values url.V
 func TestCostumeItemCreateAllocatesUniqueCodesAndAllowsDuplicates(t *testing.T) {
 	h, production, actor, typ, _ := costumeItemFixture(t)
 	path := "/production/" + strconv.FormatInt(production.ID, 10) + "/actors/" + strconv.FormatInt(actor.ID, 10) + "/items"
-	values := url.Values{"item_type_id": {strconv.FormatInt(typ.ID, 10)}, "description": {"Blue cloak"}, "status": {storage.StatusNotStarted}, "progress": {"0"}}
+	values := url.Values{"item_type_id": {strconv.FormatInt(typ.ID, 10)}, "description": {"Blue cloak"}, "status": {storage.StatusFind}, "progress": {"0"}}
 	first := httptest.NewRecorder()
 	if err := h.CreateCostumeItem(first, costumeItemRequest(http.MethodPost, path, values)); err != nil {
 		t.Fatal(err)
@@ -181,6 +181,81 @@ func TestCostumeItemCreateAllocatesUniqueCodesAndAllowsDuplicates(t *testing.T) 
 	}
 	if strings.Count(list.Body.String(), "Blue cloak") != 2 {
 		t.Fatalf("duplicate descriptions not preserved: %s", list.Body.String())
+	}
+}
+
+func TestCostumeItemFormsUseNewStatusesAndDefaultToFind(t *testing.T) {
+	h, production, actor, typ, ctx := costumeItemFixture(t)
+	listPath := costumeItemListPath(production.ID, actor.ID)
+	list := httptest.NewRecorder()
+	if err := h.ListCostumeItems(list, costumeItemRequest(http.MethodGet, listPath, nil)); err != nil {
+		t.Fatal(err)
+	}
+	body := list.Body.String()
+	for _, status := range []string{storage.StatusFind, storage.StatusMake, storage.StatusFit, storage.StatusAlterations, storage.StatusComplete} {
+		option := `<option value="` + status + `"`
+		if strings.Count(body, option) != 1 {
+			t.Errorf("add form status %q option count = %d", status, strings.Count(body, option))
+		}
+	}
+	if !strings.Contains(body, `<option value="Find" selected>Find</option>`) {
+		t.Errorf("blank add form does not default to Find: %s", body)
+	}
+	for _, old := range []string{"Not Started", "In Progress", "Blocked", "Ready"} {
+		if strings.Contains(body, `<option value="`+old+`"`) {
+			t.Errorf("add form still offers old status %q", old)
+		}
+	}
+
+	values := url.Values{
+		"item_type_id": {strconv.FormatInt(typ.ID, 10)},
+		"status":       {storage.StatusFit},
+		"progress":     {"35"},
+		"blocker":      {"Waiting for fabric"},
+	}
+	created := httptest.NewRecorder()
+	if err := h.CreateCostumeItem(created, costumeItemRequest(http.MethodPost, listPath, values)); err != nil {
+		t.Fatal(err)
+	}
+	items, err := h.items.List(ctx, storage.CostumeItemFilter{ProductionID: production.ID, ActorID: actor.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Status != storage.StatusFit || items[0].Blocker != "Waiting for fabric" {
+		t.Fatalf("created item = %#v, want Fit status with independent blocker", items)
+	}
+	detail := httptest.NewRecorder()
+	if err := h.DetailCostumeItem(detail, costumeItemRequest(http.MethodGet, costumeItemDetailPath(production.ID, actor.ID, items[0].ID), nil)); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(detail.Body.String(), "Waiting for fabric") || strings.Contains(detail.Body.String(), "Blocker noted while status is not Blocked") {
+		t.Errorf("detail does not present blocker independently: %s", detail.Body.String())
+	}
+	edit := httptest.NewRecorder()
+	if err := h.EditCostumeItem(edit, costumeItemRequest(http.MethodGet, costumeItemDetailPath(production.ID, actor.ID, items[0].ID)+"/edit", nil)); err != nil {
+		t.Fatal(err)
+	}
+	editBody := edit.Body.String()
+	if !strings.Contains(editBody, `<option value="Fit" selected>Fit</option>`) || strings.Contains(editBody, "not marked Blocked") || strings.Contains(editBody, "status is not Blocked") {
+		t.Errorf("edit form lost status/blocker independence: %s", editBody)
+	}
+	editValues := url.Values{
+		"item_type_id": {strconv.FormatInt(typ.ID, 10)},
+		"status":       {storage.StatusAlterations},
+		"progress":     {"60"},
+		"blocker":      {"Waiting for fabric"},
+		"updated_at":   {formatUpdatedAt(items[0].UpdatedAt)},
+	}
+	updated := httptest.NewRecorder()
+	if err := h.EditCostumeItem(updated, costumeItemRequest(http.MethodPost, costumeItemDetailPath(production.ID, actor.ID, items[0].ID)+"/edit", editValues)); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := h.items.Get(ctx, production.ID, items[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != storage.StatusAlterations || stored.Blocker != "Waiting for fabric" {
+		t.Fatalf("edited item = %#v, want Alterations status with unchanged blocker", stored)
 	}
 }
 
@@ -224,7 +299,7 @@ func TestCostumeItemListShowsFirstReadyPhotoThumbnail(t *testing.T) {
 	values := url.Values{
 		"item_type_id": {strconv.FormatInt(typ.ID, 10)},
 		"description":  {"Invalid submission"},
-		"status":       {storage.StatusNotStarted},
+		"status":       {storage.StatusFind},
 		"progress":     {"0"},
 	}
 	if err := h.CreateCostumeItem(invalid, costumeItemMultipartRequest(t, http.MethodPost, costumeItemListPath(production.ID, actor.ID), values, "invalid.jpg")); err != nil {
@@ -272,7 +347,7 @@ func TestCostumeItemEditRejectsStaleTimestampAndArchiveHidesFromList(t *testing.
 		t.Fatal(err)
 	}
 	path := costumeItemDetailPath(production.ID, actor.ID, item.ID) + "/edit"
-	stale := url.Values{"item_type_id": {strconv.FormatInt(typ.ID, 10)}, "description": {"Changed"}, "status": {storage.StatusReady}, "progress": {"20"}, "updated_at": {"2000-01-01T00:00:00Z"}}
+	stale := url.Values{"item_type_id": {strconv.FormatInt(typ.ID, 10)}, "description": {"Changed"}, "status": {storage.StatusFit}, "progress": {"20"}, "updated_at": {"2000-01-01T00:00:00Z"}}
 	response := httptest.NewRecorder()
 	if err := h.EditCostumeItem(response, costumeItemRequest(http.MethodPost, path, stale)); err != nil {
 		t.Fatal(err)
@@ -340,7 +415,7 @@ func TestCostumeItemMultipartCreateAndEditUploadBeforeDetailRedirect(t *testing.
 	createValues := url.Values{
 		"item_type_id": {strconv.FormatInt(typ.ID, 10)},
 		"description":  {"Blue cloak"},
-		"status":       {storage.StatusNotStarted},
+		"status":       {storage.StatusFind},
 		"progress":     {"0"},
 	}
 	createRequest := costumeItemMultipartRequest(t, http.MethodPost, listPath, createValues, "cloak.jpg")
@@ -377,7 +452,7 @@ func TestCostumeItemMultipartCreateAndEditUploadBeforeDetailRedirect(t *testing.
 	editValues := url.Values{
 		"item_type_id": {strconv.FormatInt(typ.ID, 10)},
 		"description":  {"Blue cloak with trim"},
-		"status":       {storage.StatusInProgress},
+		"status":       {storage.StatusMake},
 		"progress":     {"25"},
 		"updated_at":   {formatUpdatedAt(items[0].UpdatedAt)},
 	}
@@ -400,7 +475,7 @@ func TestCostumeItemPhotoUploadFailureReportsSavedItem(t *testing.T) {
 	values := url.Values{
 		"item_type_id": {strconv.FormatInt(typ.ID, 10)},
 		"description":  {"Saved without photo"},
-		"status":       {storage.StatusNotStarted},
+		"status":       {storage.StatusFind},
 		"progress":     {"0"},
 	}
 	response := httptest.NewRecorder()
@@ -435,7 +510,7 @@ func TestCostumeItemPhotoValidationPrecedesCreateAndEditMutation(t *testing.T) {
 	values := url.Values{
 		"item_type_id": {strconv.FormatInt(typ.ID, 10)},
 		"description":  {"Must not be created"},
-		"status":       {storage.StatusNotStarted},
+		"status":       {storage.StatusFind},
 		"progress":     {"0"},
 	}
 	response := httptest.NewRecorder()
@@ -457,7 +532,7 @@ func TestCostumeItemPhotoValidationPrecedesCreateAndEditMutation(t *testing.T) {
 	editValues := url.Values{
 		"item_type_id": {strconv.FormatInt(typ.ID, 10)},
 		"description":  {"Mutated"},
-		"status":       {storage.StatusInProgress},
+		"status":       {storage.StatusMake},
 		"progress":     {"20"},
 		"updated_at":   {formatUpdatedAt(item.UpdatedAt)},
 	}

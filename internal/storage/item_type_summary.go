@@ -13,11 +13,12 @@ type ItemTypeSummary struct {
 	ItemTypeID   int64
 	ItemTypeName string
 	Total        int
+	Find         int
+	Make         int
+	Fit          int
+	Alterations  int
 	Complete     int
-	InProgress   int
 	Blocked      int
-	Ready        int
-	NotStarted   int
 }
 
 // ItemTypeSummaryRepository reads aggregate status counts for a production.
@@ -48,7 +49,8 @@ func (r *itemTypeSummaryRepository) List(ctx context.Context, productionID int64
 			SUM(CASE WHEN costume_items.status = ? THEN 1 ELSE 0 END),
 			SUM(CASE WHEN costume_items.status = ? THEN 1 ELSE 0 END),
 			SUM(CASE WHEN costume_items.status = ? THEN 1 ELSE 0 END),
-			SUM(CASE WHEN costume_items.status = ? THEN 1 ELSE 0 END)
+			SUM(CASE WHEN costume_items.status = ? THEN 1 ELSE 0 END),
+			SUM(CASE WHEN length(trim(costume_items.blocker)) > 0 THEN 1 ELSE 0 END)
 		FROM item_types
 		JOIN costume_items
 			ON costume_items.production_id = item_types.production_id
@@ -62,7 +64,7 @@ func (r *itemTypeSummaryRepository) List(ctx context.Context, productionID int64
 			AND actors.archived_at IS NULL
 		GROUP BY item_types.id, item_types.name
 		ORDER BY item_types.name, item_types.id`,
-		StatusComplete, StatusInProgress, StatusBlocked, StatusReady, StatusNotStarted, productionID,
+		StatusFind, StatusMake, StatusFit, StatusAlterations, StatusComplete, productionID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("storage: list item type summary: %w", err)
@@ -72,7 +74,7 @@ func (r *itemTypeSummaryRepository) List(ctx context.Context, productionID int64
 	result := make([]ItemTypeSummary, 0)
 	for rows.Next() {
 		var row ItemTypeSummary
-		if err := rows.Scan(&row.ItemTypeID, &row.ItemTypeName, &row.Total, &row.Complete, &row.InProgress, &row.Blocked, &row.Ready, &row.NotStarted); err != nil {
+		if err := rows.Scan(&row.ItemTypeID, &row.ItemTypeName, &row.Total, &row.Find, &row.Make, &row.Fit, &row.Alterations, &row.Complete, &row.Blocked); err != nil {
 			return nil, fmt.Errorf("storage: scan item type summary: %w", err)
 		}
 		result = append(result, row)

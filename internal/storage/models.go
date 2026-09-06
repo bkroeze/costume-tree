@@ -7,11 +7,11 @@ import (
 )
 
 const (
-	StatusNotStarted = "Not Started"
-	StatusInProgress = "In Progress"
-	StatusBlocked    = "Blocked"
-	StatusReady      = "Ready"
-	StatusComplete   = "Complete"
+	StatusFind        = "Find"
+	StatusMake        = "Make"
+	StatusFit         = "Fit"
+	StatusAlterations = "Alterations"
+	StatusComplete    = "Complete"
 )
 
 var (

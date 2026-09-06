@@ -22,10 +22,10 @@ import (
 var costumeItemTemplates embed.FS
 
 var costumeItemStatuses = []string{
-	storage.StatusNotStarted,
-	storage.StatusInProgress,
-	storage.StatusBlocked,
-	storage.StatusReady,
+	storage.StatusFind,
+	storage.StatusMake,
+	storage.StatusFit,
+	storage.StatusAlterations,
 	storage.StatusComplete,
 }
 
@@ -58,7 +58,6 @@ type CostumeItemView struct {
 	Notes        string
 	Archived     bool
 	UpdatedAt    string
-	Warning      string
 	ThumbnailURL string
 }
 
@@ -74,7 +73,6 @@ type CostumeItemFormView struct {
 	Notes       string
 	UpdatedAt   string
 	Editing     bool
-	Warning     string
 	Errors      FieldErrors
 }
 
@@ -558,7 +556,7 @@ func (h *CostumeItemHandler) validateForm(ctx context.Context, production storag
 		model.Form.Errors = addFieldError(model.Form.Errors, "actor_id", "Choose the actor in this production.")
 	}
 	if input.Status == "" {
-		input.Status = storage.StatusNotStarted
+		input.Status = storage.StatusFind
 		model.Form.Status = input.Status
 	}
 	progressText := strings.TrimSpace(form.Progress)
@@ -585,9 +583,6 @@ func (h *CostumeItemHandler) validateForm(ctx context.Context, production storag
 		if typeErr != nil || typ.ArchivedAt != nil {
 			model.Form.Errors = addFieldError(model.Form.Errors, "item_type_id", "Choose an active item type from this production.")
 		}
-	}
-	if input.Blocker != "" && input.Status != storage.StatusBlocked {
-		model.Form.Warning = "This blocker is saved, but the item is not marked Blocked."
 	}
 	model.Form = formWithValidatedStatus(model.Form, input.Status)
 	return model, input, len(model.Form.Errors) == 0
@@ -616,7 +611,7 @@ func containsStatus(status string) bool {
 }
 
 func (h *CostumeItemHandler) listModel(ctx context.Context, production storage.Production, actor storage.Actor, items []storage.CostumeItem) (CostumeItemPageModel, error) {
-	model := CostumeItemPageModel{Title: "Costume items · " + actor.Name, Production: production, Actor: actor, Statuses: costumeItemStatuses}
+	model := CostumeItemPageModel{Title: "Costume items · " + actor.Name, Production: production, Actor: actor, Form: CostumeItemFormView{Status: storage.StatusFind}, Statuses: costumeItemStatuses}
 	model.Actors, model.ItemTypes = h.selectors(ctx, production.ID)
 	for _, item := range items {
 		model.Items = append(model.Items, h.view(ctx, production.ID, item))
@@ -706,9 +701,6 @@ func (h *CostumeItemHandler) addPhotos(ctx context.Context, model *CostumeItemPa
 
 func (h *CostumeItemHandler) view(ctx context.Context, productionID int64, item storage.CostumeItem) CostumeItemView {
 	view := CostumeItemView{ID: item.ID, Production: item.ProductionID, ActorID: item.ActorID, ItemTypeID: item.ItemTypeID, Code: item.Code, Description: item.Description, Status: item.Status, Progress: item.Progress, NextAction: item.NextAction, Blocker: item.Blocker, Notes: item.Notes, Archived: item.ArchivedAt != nil, UpdatedAt: formatUpdatedAt(item.UpdatedAt)}
-	if view.Blocker != "" && view.Status != storage.StatusBlocked {
-		view.Warning = "Blocker noted while status is not Blocked."
-	}
 	if h.actors != nil {
 		if actor, err := h.actors.Get(ctx, productionID, item.ActorID); err == nil {
 			view.ActorName = actor.Name

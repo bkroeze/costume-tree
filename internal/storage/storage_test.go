@@ -93,17 +93,20 @@ func TestForeignKeysAndProgressConstraints(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected Complete progress check failure")
 	}
-	_, err = db.SQL().ExecContext(ctx, `INSERT INTO costume_items (production_id, actor_id, item_type_id, code, status, progress) VALUES (?, ?, ?, 'C-9997', 'Not Started', 0)`, production.ID, actor.ID+1000, itemType.ID)
+	_, err = db.SQL().ExecContext(ctx, `INSERT INTO costume_items (production_id, actor_id, item_type_id, code, status, progress) VALUES (?, ?, ?, 'C-9997', 'Find', 0)`, production.ID, actor.ID+1000, itemType.ID)
 	if err == nil {
 		t.Fatal("expected actor foreign-key failure")
 	}
-	_, err = NewCostumeItemRepository(db).Create(ctx, CreateCostumeItemInput{
+	item, err := NewCostumeItemRepository(db).Create(ctx, CreateCostumeItemInput{
 		ProductionID: production.ID,
 		ActorID:      actor.ID,
 		ItemTypeID:   itemType.ID,
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if item.Status != StatusFind {
+		t.Fatalf("default costume item status = %q, want %q", item.Status, StatusFind)
 	}
 	if _, err := db.SQL().ExecContext(ctx, `DELETE FROM actors WHERE id = ?`, actor.ID); err == nil {
 		t.Fatal("expected referenced actor delete failure")

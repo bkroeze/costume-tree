@@ -16,7 +16,7 @@ import (
 //go:embed templates/item_type_summary.html
 var itemTypeSummaryTemplates embed.FS
 
-// ItemTypeSummaryCountView is one linked status count in the summary table.
+// ItemTypeSummaryCountView is one linked inventory count in the summary table.
 type ItemTypeSummaryCountView struct {
 	Label string
 	Count int
@@ -25,15 +25,16 @@ type ItemTypeSummaryCountView struct {
 
 // ItemTypeSummaryView is the presentation form of one item type aggregate.
 type ItemTypeSummaryView struct {
-	ID         int64
-	Name       string
-	Total      int
-	Complete   int
-	InProgress int
-	Blocked    int
-	Ready      int
-	NotStarted int
-	Counts     []ItemTypeSummaryCountView
+	ID          int64
+	Name        string
+	Total       int
+	Find        int
+	Make        int
+	Fit         int
+	Alterations int
+	Complete    int
+	Blocked     int
+	Counts      []ItemTypeSummaryCountView
 }
 
 // ItemTypeSummaryPageModel is the full page and HTMX fragment model.
@@ -119,24 +120,28 @@ func (h *ItemTypeSummaryHandler) ListItemTypeSummary(w http.ResponseWriter, r *h
 func (h *ItemTypeSummaryHandler) view(productionID int64, row storage.ItemTypeSummary) ItemTypeSummaryView {
 	return ItemTypeSummaryView{
 		ID: row.ItemTypeID, Name: row.ItemTypeName,
-		Total: row.Total, Complete: row.Complete, InProgress: row.InProgress,
-		Blocked: row.Blocked, Ready: row.Ready, NotStarted: row.NotStarted,
+		Total: row.Total, Find: row.Find, Make: row.Make, Fit: row.Fit,
+		Alterations: row.Alterations, Complete: row.Complete, Blocked: row.Blocked,
 		Counts: []ItemTypeSummaryCountView{
-			{Label: "Total", Count: row.Total, URL: itemTypeSummaryItemsPath(productionID, row.ItemTypeID, "")},
-			{Label: storage.StatusComplete, Count: row.Complete, URL: itemTypeSummaryItemsPath(productionID, row.ItemTypeID, storage.StatusComplete)},
-			{Label: storage.StatusInProgress, Count: row.InProgress, URL: itemTypeSummaryItemsPath(productionID, row.ItemTypeID, storage.StatusInProgress)},
-			{Label: storage.StatusBlocked, Count: row.Blocked, URL: itemTypeSummaryItemsPath(productionID, row.ItemTypeID, storage.StatusBlocked)},
-			{Label: storage.StatusReady, Count: row.Ready, URL: itemTypeSummaryItemsPath(productionID, row.ItemTypeID, storage.StatusReady)},
-			{Label: storage.StatusNotStarted, Count: row.NotStarted, URL: itemTypeSummaryItemsPath(productionID, row.ItemTypeID, storage.StatusNotStarted)},
+			{Label: "Total", Count: row.Total, URL: itemTypeSummaryItemsPath(productionID, row.ItemTypeID, "", false)},
+			{Label: storage.StatusFind, Count: row.Find, URL: itemTypeSummaryItemsPath(productionID, row.ItemTypeID, storage.StatusFind, false)},
+			{Label: storage.StatusMake, Count: row.Make, URL: itemTypeSummaryItemsPath(productionID, row.ItemTypeID, storage.StatusMake, false)},
+			{Label: storage.StatusFit, Count: row.Fit, URL: itemTypeSummaryItemsPath(productionID, row.ItemTypeID, storage.StatusFit, false)},
+			{Label: storage.StatusAlterations, Count: row.Alterations, URL: itemTypeSummaryItemsPath(productionID, row.ItemTypeID, storage.StatusAlterations, false)},
+			{Label: storage.StatusComplete, Count: row.Complete, URL: itemTypeSummaryItemsPath(productionID, row.ItemTypeID, storage.StatusComplete, false)},
+			{Label: "Blocked", Count: row.Blocked, URL: itemTypeSummaryItemsPath(productionID, row.ItemTypeID, "", true)},
 		},
 	}
 }
 
-func itemTypeSummaryItemsPath(productionID, itemTypeID int64, status string) string {
+func itemTypeSummaryItemsPath(productionID, itemTypeID int64, status string, blocked bool) string {
 	query := url.Values{}
 	query.Set("item_type_id", strconv.FormatInt(itemTypeID, 10))
 	if status != "" {
 		query.Set("status", status)
+	}
+	if blocked {
+		query.Set("blocked", "true")
 	}
 	return "/production/" + strconv.FormatInt(productionID, 10) + "/items?" + query.Encode()
 }

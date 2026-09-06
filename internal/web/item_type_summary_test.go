@@ -38,7 +38,7 @@ func TestItemTypeSummaryRendersCanonicalFilterLinksAndHTMXMutation(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	item, err := items.Create(ctx, storage.CreateCostumeItemInput{ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: cloak.ID, Status: storage.StatusInProgress, Progress: 50})
+	item, err := items.Create(ctx, storage.CreateCostumeItemInput{ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: cloak.ID, Status: storage.StatusFit, Progress: 50, Blocker: "  Waiting for shoes  "})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,11 +52,17 @@ func TestItemTypeSummaryRendersCanonicalFilterLinksAndHTMXMutation(t *testing.T)
 	if full.Code != http.StatusOK || !strings.Contains(body, "Production summary") || !strings.Contains(body, "Cloak") {
 		t.Fatalf("full summary = %d/%s", full.Code, body)
 	}
-	if !strings.Contains(body, `href="/production/`+strconv.FormatInt(production.ID, 10)+`/items?item_type_id=`+strconv.FormatInt(cloak.ID, 10)+`&amp;status=In&#43;Progress"`) {
-		t.Fatalf("missing canonical in-progress link: %s", body)
+	if !strings.Contains(body, `href="/production/`+strconv.FormatInt(production.ID, 10)+`/items?item_type_id=`+strconv.FormatInt(cloak.ID, 10)+`&amp;status=Fit"`) {
+		t.Fatalf("missing canonical fit link: %s", body)
+	}
+	if !strings.Contains(body, `href="/production/`+strconv.FormatInt(production.ID, 10)+`/items?blocked=true&amp;item_type_id=`+strconv.FormatInt(cloak.ID, 10)+`"`) {
+		t.Fatalf("missing canonical blocked link: %s", body)
 	}
 	if !strings.Contains(body, `href="/production/`+strconv.FormatInt(production.ID, 10)+`/items?item_type_id=`+strconv.FormatInt(cloak.ID, 10)+`"`) {
 		t.Fatalf("missing canonical total link: %s", body)
+	}
+	if !strings.Contains(body, `<th scope="col">Total</th><th scope="col">Find</th><th scope="col">Make</th><th scope="col">Fit</th><th scope="col">Alterations</th><th scope="col">Complete</th><th scope="col">Blocked</th>`) {
+		t.Fatalf("summary headers are out of workflow order: %s", body)
 	}
 	if strings.Contains(body, `status=Complete"`) {
 		t.Fatalf("zero complete count should not be linked: %s", body)
@@ -64,7 +70,7 @@ func TestItemTypeSummaryRendersCanonicalFilterLinksAndHTMXMutation(t *testing.T)
 
 	item.Status = storage.StatusComplete
 	item.Progress = 100
-	if _, err := items.Update(ctx, storage.UpdateCostumeItemInput{ProductionID: production.ID, ID: item.ID, ActorID: actor.ID, ItemTypeID: cloak.ID, Status: item.Status, Progress: item.Progress}); err != nil {
+	if _, err := items.Update(ctx, storage.UpdateCostumeItemInput{ProductionID: production.ID, ID: item.ID, ActorID: actor.ID, ItemTypeID: cloak.ID, Status: item.Status, Progress: item.Progress, Blocker: item.Blocker}); err != nil {
 		t.Fatal(err)
 	}
 	fragmentRequest := httptest.NewRequest(http.MethodGet, path, nil)
@@ -74,7 +80,7 @@ func TestItemTypeSummaryRendersCanonicalFilterLinksAndHTMXMutation(t *testing.T)
 		t.Fatal(err)
 	}
 	fragmentBody := fragment.Body.String()
-	if fragment.Code != http.StatusOK || strings.Contains(fragmentBody, "<!doctype html") || !strings.Contains(fragmentBody, ">Complete</th>") || !strings.Contains(fragmentBody, `status=Complete`) {
+	if fragment.Code != http.StatusOK || strings.Contains(fragmentBody, "<!doctype html") || !strings.Contains(fragmentBody, ">Complete</th>") || !strings.Contains(fragmentBody, `status=Complete`) || !strings.Contains(fragmentBody, `blocked=true`) {
 		t.Fatalf("updated HTMX summary = %d/%s", fragment.Code, fragmentBody)
 	}
 }

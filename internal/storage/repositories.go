@@ -568,7 +568,7 @@ func (r *costumeItemRepository) AllocateCode(ctx context.Context, productionID i
 func (r *costumeItemRepository) Create(ctx context.Context, input CreateCostumeItemInput) (CostumeItem, error) {
 	status := input.Status
 	if status == "" {
-		status = StatusNotStarted
+		status = StatusFind
 	}
 	tx, err := r.db.begin(ctx)
 	if err != nil {
@@ -653,8 +653,7 @@ func (r *costumeItemRepository) List(ctx context.Context, filter CostumeItemFilt
 		args = append(args, StatusComplete)
 	}
 	if filter.Blocked {
-		query += ` AND status = ?`
-		args = append(args, StatusBlocked)
+		query += ` AND length(trim(blocker)) > 0`
 	}
 	query += ` ORDER BY id`
 	rows, err := r.db.db.QueryContext(ctx, query, args...)

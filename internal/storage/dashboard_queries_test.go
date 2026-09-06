@@ -25,16 +25,18 @@ func TestDashboardQueriesExcludeArchivedAndAverageActiveProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, input := range []CreateCostumeItemInput{
-		{ProductionID: production.ID, ActorID: ada.ID, ItemTypeID: typ.ID, Status: StatusReady, Progress: 20},
-		{ProductionID: production.ID, ActorID: ada.ID, ItemTypeID: typ.ID, Status: StatusInProgress, Progress: 80},
+		{ProductionID: production.ID, ActorID: ada.ID, ItemTypeID: typ.ID, Status: StatusFind, Progress: 0},
+		{ProductionID: production.ID, ActorID: ada.ID, ItemTypeID: typ.ID, Status: StatusMake, Progress: 25, Blocker: "Waiting for fabric"},
+		{ProductionID: production.ID, ActorID: ada.ID, ItemTypeID: typ.ID, Status: StatusFit, Progress: 50, Blocker: "   "},
+		{ProductionID: production.ID, ActorID: ada.ID, ItemTypeID: typ.ID, Status: StatusAlterations, Progress: 75},
 		{ProductionID: production.ID, ActorID: ada.ID, ItemTypeID: typ.ID, Status: StatusComplete, Progress: 100},
-		{ProductionID: production.ID, ActorID: archivedActor.ID, ItemTypeID: typ.ID, Status: StatusBlocked, Progress: 0},
+		{ProductionID: production.ID, ActorID: archivedActor.ID, ItemTypeID: typ.ID, Status: StatusMake, Progress: 0, Blocker: "Archived actor blocker"},
 	} {
 		if _, err := items.Create(ctx, input); err != nil {
 			t.Fatal(err)
 		}
 	}
-	archivedItem, err := items.Create(ctx, CreateCostumeItemInput{ProductionID: production.ID, ActorID: ada.ID, ItemTypeID: typ.ID, Status: StatusBlocked, Progress: 0})
+	archivedItem, err := items.Create(ctx, CreateCostumeItemInput{ProductionID: production.ID, ActorID: ada.ID, ItemTypeID: typ.ID, Status: StatusFind, Progress: 0, Blocker: "Archived item blocker"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +52,7 @@ func TestDashboardQueriesExcludeArchivedAndAverageActiveProgress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if kpis.TotalActivePieces != 3 || kpis.Ready != 1 || kpis.Complete != 1 || kpis.InProgress != 1 || kpis.Blocked != 0 || kpis.ReadyComplete != 2 || kpis.Incomplete != 2 {
+	if kpis.TotalActivePieces != 5 || kpis.Find != 1 || kpis.Make != 1 || kpis.Fit != 1 || kpis.Alterations != 1 || kpis.Complete != 1 || kpis.Blocked != 1 || kpis.Incomplete != 4 {
 		t.Fatalf("kpis = %#v", kpis)
 	}
 	summaries, err := queries.ActorSummaries(ctx, production.ID)
@@ -60,7 +62,7 @@ func TestDashboardQueriesExcludeArchivedAndAverageActiveProgress(t *testing.T) {
 	if len(summaries) != 1 || summaries[0].Name != "Ada" {
 		t.Fatalf("summaries = %#v", summaries)
 	}
-	if summaries[0].ActiveItems != 3 || summaries[0].ReadyComplete != 2 || summaries[0].Incomplete != 2 || summaries[0].Completion == nil || *summaries[0].Completion != 200.0/3.0 {
+	if summaries[0].ActiveItems != 5 || summaries[0].Find != 1 || summaries[0].Make != 1 || summaries[0].Fit != 1 || summaries[0].Alterations != 1 || summaries[0].Complete != 1 || summaries[0].Blocked != 1 || summaries[0].Incomplete != 4 || summaries[0].Completion == nil || *summaries[0].Completion != 50 {
 		t.Fatalf("actor summary = %#v", summaries[0])
 	}
 }

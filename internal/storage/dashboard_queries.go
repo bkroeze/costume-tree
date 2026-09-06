@@ -8,16 +8,16 @@ import (
 )
 
 // ProductionKPIs is the bounded, production-scoped rollup used by the
-// dashboard. Status counts are deliberately based on the status column rather
-// than progress, so a partially progressed item is not inferred to be ready.
+// dashboard. Workflow counts come from status, while Blocked is independently
+// derived from a non-empty blocker note.
 type ProductionKPIs struct {
 	TotalActivePieces int
-	NotStarted        int
-	InProgress        int
-	Blocked           int
-	Ready             int
+	Find              int
+	Make              int
+	Fit               int
+	Alterations       int
 	Complete          int
-	ReadyComplete     int
+	Blocked           int
 	Incomplete        int
 }
 
@@ -30,12 +30,12 @@ type ActorSummary struct {
 	Name            string
 	Role            string
 	ActiveItems     int
-	NotStarted      int
-	InProgress      int
-	Blocked         int
-	Ready           int
+	Find            int
+	Make            int
+	Fit             int
+	Alterations     int
 	Complete        int
-	ReadyComplete   int
+	Blocked         int
 	Incomplete      int
 	Completion      *float64
 	CompletionLabel string
@@ -68,7 +68,8 @@ SELECT
   COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
   COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
   COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
-  COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0)
+  COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
+  COALESCE(SUM(CASE WHEN length(trim(ci.blocker)) > 0 THEN 1 ELSE 0 END), 0)
 FROM actors a
 LEFT JOIN costume_items ci
   ON ci.production_id = a.production_id
@@ -78,12 +79,12 @@ WHERE a.production_id = ?
   AND a.archived_at IS NULL`
 	var result ProductionKPIs
 	err := q.db.db.QueryRowContext(ctx, statement,
-		StatusNotStarted, StatusInProgress, StatusBlocked, StatusReady, StatusComplete, productionID,
-	).Scan(&result.TotalActivePieces, &result.NotStarted, &result.InProgress, &result.Blocked, &result.Ready, &result.Complete)
+		StatusFind, StatusMake, StatusFit, StatusAlterations, StatusComplete, productionID,
+	).Scan(&result.TotalActivePieces, &result.Find, &result.Make, &result.Fit,
+		&result.Alterations, &result.Complete, &result.Blocked)
 	if err != nil {
 		return ProductionKPIs{}, fmt.Errorf("storage: dashboard production kpis: %w", err)
 	}
-	result.ReadyComplete = result.Ready + result.Complete
 	result.Incomplete = result.TotalActivePieces - result.Complete
 	return result, nil
 }
@@ -104,6 +105,7 @@ SELECT
   COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
   COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
   COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
+  COALESCE(SUM(CASE WHEN length(trim(ci.blocker)) > 0 THEN 1 ELSE 0 END), 0),
   AVG(ci.progress)
 FROM actors a
 LEFT JOIN costume_items ci
@@ -115,7 +117,7 @@ WHERE a.production_id = ?
 GROUP BY a.id, a.production_id, a.name, a.role
 ORDER BY lower(a.name), a.id`
 	rows, err := q.db.db.QueryContext(ctx, statement,
-		StatusNotStarted, StatusInProgress, StatusBlocked, StatusReady, StatusComplete, productionID,
+		StatusFind, StatusMake, StatusFit, StatusAlterations, StatusComplete, productionID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("storage: dashboard actor summaries: %w", err)
@@ -126,11 +128,10 @@ ORDER BY lower(a.name), a.id`
 		var summary ActorSummary
 		var average sql.NullFloat64
 		if err := rows.Scan(&summary.ID, &summary.ProductionID, &summary.Name, &summary.Role,
-			&summary.ActiveItems, &summary.NotStarted, &summary.InProgress, &summary.Blocked,
-			&summary.Ready, &summary.Complete, &average); err != nil {
+			&summary.ActiveItems, &summary.Find, &summary.Make, &summary.Fit,
+			&summary.Alterations, &summary.Complete, &summary.Blocked, &average); err != nil {
 			return nil, fmt.Errorf("storage: scan dashboard actor summary: %w", err)
 		}
-		summary.ReadyComplete = summary.Ready + summary.Complete
 		summary.Incomplete = summary.ActiveItems - summary.Complete
 		if average.Valid {
 			value := average.Float64

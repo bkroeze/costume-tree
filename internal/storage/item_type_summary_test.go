@@ -54,28 +54,36 @@ func TestItemTypeSummaryListCountsActiveItemsByStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	create := func(actorID int64, typID int64, status string, progress int) CostumeItem {
+	create := func(actorID int64, typID int64, status string, progress int, blocker string) CostumeItem {
 		t.Helper()
-		item, err := items.Create(ctx, CreateCostumeItemInput{ProductionID: production.ID, ActorID: actorID, ItemTypeID: typID, Status: status, Progress: progress})
+		item, err := items.Create(ctx, CreateCostumeItemInput{
+			ProductionID: production.ID,
+			ActorID:      actorID,
+			ItemTypeID:   typID,
+			Status:       status,
+			Progress:     progress,
+			Blocker:      blocker,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return item
 	}
-	create(actor.ID, cloak.ID, StatusInProgress, 40)
-	create(actor.ID, cloak.ID, StatusInProgress, 60)
-	create(actor.ID, cloak.ID, StatusComplete, 100)
-	create(actor.ID, cloak.ID, StatusBlocked, 10)
-	create(actor.ID, cloak.ID, StatusReady, 80)
-	archivedItem := create(actor.ID, cloak.ID, StatusNotStarted, 0)
+	create(actor.ID, cloak.ID, StatusFind, 10, "  Need fabric  ")
+	create(actor.ID, cloak.ID, StatusMake, 30, "")
+	create(actor.ID, cloak.ID, StatusFit, 50, "")
+	create(actor.ID, cloak.ID, StatusFit, 60, "   ")
+	create(actor.ID, cloak.ID, StatusAlterations, 80, "")
+	create(actor.ID, cloak.ID, StatusComplete, 100, "")
+	archivedItem := create(actor.ID, cloak.ID, StatusFind, 0, "Archived blocker")
 	if err := items.Archive(ctx, production.ID, archivedItem.ID); err != nil {
 		t.Fatal(err)
 	}
-	create(archivedActor.ID, cloak.ID, StatusComplete, 100)
+	create(archivedActor.ID, cloak.ID, StatusComplete, 100, "Archived actor blocker")
 	if err := actors.Archive(ctx, production.ID, archivedActor.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := items.Create(ctx, CreateCostumeItemInput{ProductionID: otherProduction.ID, ActorID: otherActor.ID, ItemTypeID: otherType.ID, Status: StatusReady, Progress: 90}); err != nil {
+	if _, err := items.Create(ctx, CreateCostumeItemInput{ProductionID: otherProduction.ID, ActorID: otherActor.ID, ItemTypeID: otherType.ID, Status: StatusMake, Progress: 30, Blocker: "Other production blocker"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -87,14 +95,14 @@ func TestItemTypeSummaryListCountsActiveItemsByStatus(t *testing.T) {
 		t.Fatalf("summary rows = %d, want one represented active type", len(got))
 	}
 	row := got[0]
-	if row.ItemTypeID != cloak.ID || row.ItemTypeName != "Cloak" || row.Total != 5 || row.InProgress != 2 || row.Complete != 1 || row.Blocked != 1 || row.Ready != 1 || row.NotStarted != 0 {
+	if row.ItemTypeID != cloak.ID || row.ItemTypeName != "Cloak" || row.Total != 6 || row.Find != 1 || row.Make != 1 || row.Fit != 2 || row.Alterations != 1 || row.Complete != 1 || row.Blocked != 1 {
 		t.Fatalf("summary row = %+v", row)
 	}
 	other, err := summaries.List(ctx, otherProduction.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(other) != 1 || other[0].Total != 1 || other[0].Ready != 1 || other[0].ItemTypeID != otherType.ID {
+	if len(other) != 1 || other[0].Total != 1 || other[0].Make != 1 || other[0].Blocked != 1 || other[0].ItemTypeID != otherType.ID {
 		t.Fatalf("second production summary = %+v", other)
 	}
 }
