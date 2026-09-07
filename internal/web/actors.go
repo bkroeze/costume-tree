@@ -83,8 +83,8 @@ type ActorHandler struct {
 }
 
 // NewActorHandler constructs a production/actor handler from repositories and
-// the parsed application templates. An optional item-type repository receives
-// the default vocabulary when the first production is created.
+// the parsed application templates. An optional item-type repository seeds the
+// default vocabulary for each newly created production.
 func NewActorHandler(productions storage.ProductionRepository, actors storage.ActorRepository, pages *template.Template, itemTypes ...storage.ItemTypeRepository) *ActorHandler {
 	var types storage.ItemTypeRepository
 	if len(itemTypes) > 0 {
@@ -112,7 +112,7 @@ func (h *ActorHandler) NewProduction(w http.ResponseWriter, r *http.Request) err
 	return h.render(w, r, http.StatusOK, "production-page", "production-bootstrap", model)
 }
 
-// CreateProduction validates and persists the first production.
+// CreateProduction validates and persists a new production.
 func (h *ActorHandler) CreateProduction(w http.ResponseWriter, r *http.Request) error {
 	if err := r.ParseForm(); err != nil {
 		return &Error{Status: http.StatusBadRequest, Message: "Unable to read the production form.", Err: fmt.Errorf("parse production form: %w", err)}
@@ -144,8 +144,9 @@ func (h *ActorHandler) CreateProduction(w http.ResponseWriter, r *http.Request) 
 	return nil
 }
 
-// ListActors renders active actors and an archived section for the active
-// production. A missing production remains a first-run state.
+// ListActors renders active actors and an archived section for the requested
+// production. Legacy routes fall back to the first active production, and a
+// missing fallback remains a first-run state.
 func (h *ActorHandler) ListActors(w http.ResponseWriter, r *http.Request) error {
 	production, err := h.productionForRequest(r)
 	if err != nil {
@@ -158,9 +159,9 @@ func (h *ActorHandler) ListActors(w http.ResponseWriter, r *http.Request) error 
 	return h.renderActors(w, r, production, ActorFormView{})
 }
 
-// CreateActor validates and persists an actor in the active production. Actor
-// names are intentionally not checked for uniqueness here; duplicate names
-// are valid from the web layer's perspective.
+// CreateActor validates and persists an actor in the requested production.
+// Actor names are intentionally not checked for uniqueness here; duplicate
+// names are valid from the web layer's perspective.
 func (h *ActorHandler) CreateActor(w http.ResponseWriter, r *http.Request) error {
 	if err := r.ParseForm(); err != nil {
 		return &Error{Status: http.StatusBadRequest, Message: "Unable to read the actor form.", Err: fmt.Errorf("parse actor form: %w", err)}

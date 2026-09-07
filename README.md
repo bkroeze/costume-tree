@@ -1,6 +1,6 @@
 # Costume Tree
 
-Costume Tree is a single-container costume inventory application. It stores productions, actors, reusable item types, and physical costume pieces in SQLite. Each physical piece receives an immutable production-scoped code such as `C-0001`.
+Costume Tree is a single-container costume inventory application. It stores productions, actors, reusable item types, and physical costume pieces in SQLite. The home page lists active productions with links to each production's dashboard and actor roster. Each physical piece receives an immutable production-scoped code such as `C-0001`.
 
 ## Prerequisites
 
@@ -141,7 +141,7 @@ Before an upgrade: stop the old container, create and verify a backup, build the
 - `internal/bulk`: pure blank-line-delimited bulk-input parser.
 - `internal/web`: route composition, handlers, server-rendered templates, HTMX fragments, and local static assets.
 - `internal/web/templates`: progressive-enhancement HTML; ordinary POST/GET requests remain canonical when JavaScript is unavailable.
-- `internal/web/assets`: vendored HTMX and Alpine assets plus application CSS; no runtime asset network access.
+- `internal/web/assets`: vendored HTMX and Alpine scripts, application CSS, and local brand and web-app assets; no runtime asset network access.
 
 The web layer owns HTTP and rendering. HTMX requests receive focused server-rendered fragments; Alpine is used only for local presentation behavior. SQLite remains authoritative for all state, identifiers, aggregates, filters, and optimistic edit timestamps.
 

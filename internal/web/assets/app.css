@@ -1038,6 +1038,11 @@ a.badge {
     align-items: stretch;
   }
 
+  .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .site-header__inner {
     flex-direction: column;
   }
