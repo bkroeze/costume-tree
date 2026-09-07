@@ -25,8 +25,17 @@ Install [just](https://just.systems/) and inspect the available recipes:
 just --list
 just check
 just image
+just docker-push
 just compose-start
 ```
+
+`just docker-push` builds and pushes `ghcr.io/bkroeze/costume-tree:<git-short-sha>` by default, then prints the full image reference. Configure the package visibility separately in GitHub's package settings:
+
+```sh
+IMAGE_REPOSITORY=ghcr.io/bkroeze/costume-tree IMAGE_TAG=latest just docker-push
+```
+
+Override the registry path or tag when needed.
 
 Container management uses `IMAGE`, `CONTAINER`, `VOLUME`, `PHOTO_VOLUME`, and `PORT` environment overrides:
 

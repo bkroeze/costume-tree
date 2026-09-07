@@ -5,6 +5,10 @@ container := env_var_or_default("CONTAINER", "costume-tree")
 volume := env_var_or_default("VOLUME", "costume-tree-data")
 photo_volume := env_var_or_default("PHOTO_VOLUME", "costume-tree-photos")
 port := env_var_or_default("PORT", "8080")
+image_repository := env_var_or_default("IMAGE_REPOSITORY", "ghcr.io/bkroeze/costume-tree")
+image_tag := env_var_or_default("IMAGE_TAG", `git rev-parse --short HEAD`)
+
+
 
 # Show the available project commands.
 default:
@@ -36,6 +40,13 @@ build:
 # Build the OCI image. Override IMAGE=... when needed.
 image:
     docker build --tag {{image}} .
+
+
+# Build and push an image. Set GHCR visibility in the package settings.
+docker-push:
+    @docker build --quiet --tag {{image_repository}}:{{image_tag}} . >/dev/null
+    @docker push {{image_repository}}:{{image_tag}} >&2
+    @printf '%s:%s\n' '{{image_repository}}' '{{image_tag}}'
 
 # Build and start the Compose service in the background.
 compose-start:
