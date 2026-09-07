@@ -36,7 +36,7 @@ func TestHandlerServesHomeAndEmbeddedAsset(t *testing.T) {
 		if contentType := response.Header().Get("Content-Type"); contentType != "text/html; charset=utf-8" {
 			t.Errorf("Content-Type = %q", contentType)
 		}
-		if body := response.Body.String(); !strings.Contains(body, `href="/assets/app.css"`) {
+		if body := response.Body.String(); !strings.Contains(body, `href="/assets/app.css`) {
 			t.Errorf("body does not reference embedded stylesheet: %s", body)
 		}
 	})

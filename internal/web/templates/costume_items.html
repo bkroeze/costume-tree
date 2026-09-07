@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
   <link rel="manifest" href="/assets/site.webmanifest">
   <meta name="theme-color" content="#fde047">
-  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/app.css?v=3">
   <script src="/assets/htmx.min.js" defer></script>
 </head>
 <body>
@@ -30,7 +30,7 @@
 {{define "costume-item-page" -}}
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{.Title}}</title><link rel="icon" href="/assets/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="manifest" href="/assets/site.webmanifest"><meta name="theme-color" content="#fde047"><link rel="stylesheet" href="/assets/app.css"><script src="/assets/htmx.min.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{.Title}}</title><link rel="icon" href="/assets/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png"><link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png"><link rel="manifest" href="/assets/site.webmanifest"><meta name="theme-color" content="#fde047"><link rel="stylesheet" href="/assets/app.css?v=3"><script src="/assets/htmx.min.js" defer></script></head>
 <body><header class="site-header"><div class="site-header__inner"><a class="brand" href="/" aria-label="Costume Tree home"><span class="brand-mark" aria-hidden="true"><img src="/assets/favicon-dark-32x32.png" alt="" width="32" height="32"></span><span class="brand-copy"><span>Costume Tree</span><small>Wardrobe operations</small></span></a><a class="badge" href="/production/{{.Production.ID}}/dashboard">{{.Production.Name}}</a></div></header>
 <main class="page-shell" id="costume-item-page"><p class="eyebrow">Production / item</p><div id="costume-item-detail">{{if .Form.Editing}}{{template "costume-item-edit" .}}{{else}}{{template "costume-item-detail" .}}{{end}}</div></main><footer class="site-footer">Costume Tree / backstage clarity, one piece at a time.</footer></body>
 </html>
