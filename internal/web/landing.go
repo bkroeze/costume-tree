@@ -61,9 +61,14 @@ func NewLandingHandler(
 
 // Landing handles GET /{$} by displaying the Option B hero showcase and all shows.
 func (h *LandingHandler) Landing(w http.ResponseWriter, r *http.Request) error {
+	return h.render(w, r, http.StatusOK, demoState{})
+}
+
+func (h *LandingHandler) render(w http.ResponseWriter, r *http.Request, status int, demo demoState) error {
 	ctx := r.Context()
 	model := LandingPageModel{
 		Title: "Costume Tree — Wardrobe Operations",
+		Demo:  demo,
 	}
 
 	if h.productions != nil {
@@ -94,29 +99,34 @@ func (h *LandingHandler) Landing(w http.ResponseWriter, r *http.Request) error {
 				Name:         prod.Name,
 				Archived:     prod.ArchivedAt != nil,
 				DashboardURL: "/production/" + strconv.FormatInt(prod.ID, 10) + "/dashboard",
-				ActorsURL:    "/production/" + strconv.FormatInt(prod.ID, 10) + "/actors/" + strconv.FormatInt(prod.ID, 10) + "/items",
+				ActorsURL:    "/production/" + strconv.FormatInt(prod.ID, 10) + "/actors",
 			}
 
-			// Read actor count if actors repo available
 			if h.actors != nil {
-				actList, _ := h.actors.List(ctx, prod.ID, false)
+				actList, err := h.actors.List(ctx, prod.ID, false)
+				if err != nil {
+					return &Error{
+						Status:  http.StatusInternalServerError,
+						Message: "Unable to list actors.",
+						Err:     fmt.Errorf("landing: list actors for production %d: %w", prod.ID, err),
+					}
+				}
 				card.ActorCount = len(actList)
 				model.TotalActors += len(actList)
-				if len(actList) > 0 {
-					card.ActorsURL = "/production/" + strconv.FormatInt(prod.ID, 10) + "/actors/" + strconv.FormatInt(actList[0].ID, 10) + "/items"
-				} else {
-					card.ActorsURL = "/production/" + strconv.FormatInt(prod.ID, 10) + "/dashboard"
-				}
 			}
 
-			// Read KPIs if queries available
 			if h.queries != nil {
 				kpis, err := h.queries.ProductionKPIs(ctx, prod.ID)
-				if err == nil {
-					card.PieceCount = kpis.TotalActivePieces
-					card.BlockedCount = kpis.Blocked
-					model.TotalPieces += kpis.TotalActivePieces
+				if err != nil {
+					return &Error{
+						Status:  http.StatusInternalServerError,
+						Message: "Unable to load production totals.",
+						Err:     fmt.Errorf("landing: load KPIs for production %d: %w", prod.ID, err),
+					}
 				}
+				card.PieceCount = kpis.TotalActivePieces
+				card.BlockedCount = kpis.Blocked
+				model.TotalPieces += kpis.TotalActivePieces
 			}
 
 			model.Shows = append(model.Shows, card)
@@ -136,7 +146,7 @@ func (h *LandingHandler) Landing(w http.ResponseWriter, r *http.Request) error {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(status)
 	_, err := page.WriteTo(w)
 	return err
 }

@@ -54,15 +54,7 @@ type demoState struct {
 	Success string
 }
 
-type pageModel struct {
-	Title       string
-	Shows       []ShowCardView
-	HasShows    bool
-	TotalShows  int
-	TotalActors int
-	TotalPieces int
-	Demo        demoState
-}
+type pageModel = LandingPageModel
 
 // New constructs the application HTTP handler from embedded content and its
 // explicit application dependencies.
@@ -100,8 +92,10 @@ func New(logger *slog.Logger, dependencies Dependencies) (http.Handler, error) {
 		summaryHandler := NewItemTypeSummaryHandler(productions, storage.NewItemTypeSummaryRepository(database), pages)
 		bulkHandler := NewBulkImportHandler(productions, storage.NewBulkImporter(database), pages)
 		landingHandler := NewLandingHandler(productions, actors, storage.NewDashboardQueries(database), pages)
+		server.landing = landingHandler
 
 		mux.Handle("GET /{$}", server.handle("landing", landingHandler.Landing))
+		mux.Handle("GET /production/new", server.handle("production-new", actorHandler.NewProduction))
 		mux.Handle("GET /production", server.handle("production", actorHandler.Production))
 		mux.Handle("POST /production", server.handle("production", actorHandler.Production))
 		mux.Handle("GET /actors", server.handle("actors", actorHandler.Actors))
@@ -109,6 +103,11 @@ func New(logger *slog.Logger, dependencies Dependencies) (http.Handler, error) {
 		mux.Handle("GET /actors/{id}", server.handle("actor", actorHandler.EditActor))
 		mux.Handle("POST /actors/{id}", server.handle("actor", actorHandler.EditActor))
 		mux.Handle("POST /actors/{id}/archive", server.handle("actor-archive", actorHandler.ArchiveActor))
+		mux.Handle("GET /production/{production}/actors", server.handle("actors", actorHandler.Actors))
+		mux.Handle("POST /production/{production}/actors", server.handle("actors", actorHandler.Actors))
+		mux.Handle("GET /production/{production}/actors/{id}", server.handle("actor", actorHandler.EditActor))
+		mux.Handle("POST /production/{production}/actors/{id}", server.handle("actor", actorHandler.EditActor))
+		mux.Handle("POST /production/{production}/actors/{id}/archive", server.handle("actor-archive", actorHandler.ArchiveActor))
 
 		mux.Handle("GET /production/{production}/item-types", server.handle("item-types", itemTypeHandler.ItemTypes))
 		mux.Handle("POST /production/{production}/item-types", server.handle("item-type-create", itemTypeHandler.CreateItemType))
@@ -148,6 +147,7 @@ type server struct {
 	logger    *slog.Logger
 	pages     *template.Template
 	readiness Readiness
+	landing   *LandingHandler
 }
 
 func (s *server) home(w http.ResponseWriter, _ *http.Request) error {
@@ -175,6 +175,9 @@ func (s *server) demo(w http.ResponseWriter, r *http.Request) error {
 			SetTrigger(w, "demo:submitted")
 		}
 		return RenderFragment(w, s.pages, "demo-feedback", status, pageModel{Title: "Costume Tree", Demo: state})
+	}
+	if s.landing != nil {
+		return s.landing.render(w, r, status, state)
 	}
 	return s.renderPage(w, status, pageModel{Title: "Costume Tree", Demo: state})
 }
