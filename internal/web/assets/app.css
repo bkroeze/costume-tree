@@ -142,10 +142,14 @@ h3 {
   border-radius: var(--radius-small);
   background: var(--ink);
   box-shadow: var(--shadow-small);
-  color: var(--yellow);
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  font-weight: 800;
+  padding: 4px;
+}
+
+.brand-mark img {
+  width: 32px;
+  height: 32px;
+  display: block;
+  object-fit: contain;
 }
 
 .brand-copy {
