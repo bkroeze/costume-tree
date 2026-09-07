@@ -51,7 +51,7 @@ func TestProductionBootstrapAndActorLifecycle(t *testing.T) {
 	if err := handler.CreateProduction(created, actorFormRequest(http.MethodPost, ProductionPath, url.Values{"name": {"  Hamlet  "}})); err != nil {
 		t.Fatal(err)
 	}
-	if created.Code != http.StatusSeeOther || created.Header().Get("Location") != ActorsPath {
+	if created.Code != http.StatusSeeOther || created.Header().Get("Location") != "/production/1/actors" {
 		t.Fatalf("create production response = %d location %q", created.Code, created.Header().Get("Location"))
 	}
 
@@ -78,7 +78,7 @@ func TestProductionBootstrapAndActorLifecycle(t *testing.T) {
 	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), "Banquo") || !strings.Contains(list.Body.String(), "Thane") {
 		t.Fatalf("actor list = %d %s", list.Code, list.Body.String())
 	}
-	if !strings.Contains(list.Body.String(), `href="/actors/1">Edit</a>`) {
+	if !strings.Contains(list.Body.String(), `href="/production/1/actors/1">Edit</a>`) {
 		t.Fatalf("actor edit link missing or incorrect: %s", list.Body.String())
 	}
 }

@@ -83,8 +83,8 @@ type ActorHandler struct {
 }
 
 // NewActorHandler constructs a production/actor handler from repositories and
-// the parsed application templates. An optional item-type repository receives
-// the default vocabulary when the first production is created.
+// the parsed application templates. An optional item-type repository seeds the
+// default vocabulary for each newly created production.
 func NewActorHandler(productions storage.ProductionRepository, actors storage.ActorRepository, pages *template.Template, itemTypes ...storage.ItemTypeRepository) *ActorHandler {
 	var types storage.ItemTypeRepository
 	if len(itemTypes) > 0 {
@@ -107,7 +107,12 @@ func (h *ActorHandler) ProductionBootstrap(w http.ResponseWriter, r *http.Reques
 	return h.renderActors(w, r, production, ActorFormView{})
 }
 
-// CreateProduction validates and persists the first production.
+func (h *ActorHandler) NewProduction(w http.ResponseWriter, r *http.Request) error {
+	model := ActorPageModel{Title: "Create your production", FirstRun: true, Empty: true}
+	return h.render(w, r, http.StatusOK, "production-page", "production-bootstrap", model)
+}
+
+// CreateProduction validates and persists a new production.
 func (h *ActorHandler) CreateProduction(w http.ResponseWriter, r *http.Request) error {
 	if err := r.ParseForm(); err != nil {
 		return &Error{Status: http.StatusBadRequest, Message: "Unable to read the production form.", Err: fmt.Errorf("parse production form: %w", err)}
@@ -135,14 +140,15 @@ func (h *ActorHandler) CreateProduction(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	SetTrigger(w, "production:created")
-	Redirect(w, r, ActorsPath, http.StatusSeeOther)
+	Redirect(w, r, productionActorsPath(production.ID), http.StatusSeeOther)
 	return nil
 }
 
-// ListActors renders active actors and an archived section for the active
-// production. A missing production remains a first-run state.
+// ListActors renders active actors and an archived section for the requested
+// production. Legacy routes fall back to the first active production, and a
+// missing fallback remains a first-run state.
 func (h *ActorHandler) ListActors(w http.ResponseWriter, r *http.Request) error {
-	production, err := h.activeProduction(r.Context())
+	production, err := h.productionForRequest(r)
 	if err != nil {
 		return err
 	}
@@ -153,14 +159,14 @@ func (h *ActorHandler) ListActors(w http.ResponseWriter, r *http.Request) error 
 	return h.renderActors(w, r, production, ActorFormView{})
 }
 
-// CreateActor validates and persists an actor in the active production. Actor
-// names are intentionally not checked for uniqueness here; duplicate names
-// are valid from the web layer's perspective.
+// CreateActor validates and persists an actor in the requested production.
+// Actor names are intentionally not checked for uniqueness here; duplicate
+// names are valid from the web layer's perspective.
 func (h *ActorHandler) CreateActor(w http.ResponseWriter, r *http.Request) error {
 	if err := r.ParseForm(); err != nil {
 		return &Error{Status: http.StatusBadRequest, Message: "Unable to read the actor form.", Err: fmt.Errorf("parse actor form: %w", err)}
 	}
-	production, err := h.activeProduction(r.Context())
+	production, err := h.productionForRequest(r)
 	if err != nil {
 		return err
 	}
@@ -186,14 +192,14 @@ func (h *ActorHandler) CreateActor(w http.ResponseWriter, r *http.Request) error
 	if IsHTMX(r) {
 		return h.renderActorsFragment(w, r, production, ActorFormView{})
 	}
-	Redirect(w, r, ActorsPath, http.StatusSeeOther)
+	Redirect(w, r, productionActorsPath(production.ID), http.StatusSeeOther)
 	return nil
 }
 
 // EditActor renders an actor form for GET and updates an actor for POST. The
 // actor ID may come from a mux path value, query parameter, or form field.
 func (h *ActorHandler) EditActor(w http.ResponseWriter, r *http.Request) error {
-	production, err := h.activeProduction(r.Context())
+	production, err := h.productionForRequest(r)
 	if err != nil {
 		return err
 	}
@@ -239,14 +245,14 @@ func (h *ActorHandler) EditActor(w http.ResponseWriter, r *http.Request) error {
 	if IsHTMX(r) {
 		return h.renderActorsFragment(w, r, production, ActorFormView{})
 	}
-	Redirect(w, r, ActorsPath, http.StatusSeeOther)
+	Redirect(w, r, productionActorsPath(production.ID), http.StatusSeeOther)
 	return nil
 }
 
 // ArchiveActor archives rather than deleting an actor. It accepts the actor ID
 // from a mux path value, query parameter, or form field.
 func (h *ActorHandler) ArchiveActor(w http.ResponseWriter, r *http.Request) error {
-	production, err := h.activeProduction(r.Context())
+	production, err := h.productionForRequest(r)
 	if err != nil {
 		return err
 	}
@@ -271,7 +277,7 @@ func (h *ActorHandler) ArchiveActor(w http.ResponseWriter, r *http.Request) erro
 	if IsHTMX(r) {
 		return h.renderActorsFragment(w, r, production, ActorFormView{})
 	}
-	Redirect(w, r, ActorsPath, http.StatusSeeOther)
+	Redirect(w, r, productionActorsPath(production.ID), http.StatusSeeOther)
 	return nil
 }
 
@@ -315,6 +321,32 @@ func (h *ActorHandler) activeProduction(ctx context.Context) (*storage.Productio
 	}
 	result := active[0]
 	return &result, nil
+}
+
+func (h *ActorHandler) productionForRequest(r *http.Request) (*storage.Production, error) {
+	value := r.PathValue("production")
+	if value == "" {
+		return h.activeProduction(r.Context())
+	}
+	if h.productions == nil {
+		return nil, &Error{Status: http.StatusInternalServerError, Message: "Production storage is unavailable.", Err: errors.New("web: production repository is required")}
+	}
+	id, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || id < 1 {
+		return nil, &Error{Status: http.StatusBadRequest, Message: "Choose a valid production.", Err: errors.New("production id must be a positive integer")}
+	}
+	production, err := h.productions.Get(r.Context(), id)
+	if err != nil {
+		return nil, h.repositoryError("get production", err)
+	}
+	if production.ArchivedAt != nil {
+		return nil, h.repositoryError("get production", storage.ErrArchived)
+	}
+	return &production, nil
+}
+
+func productionActorsPath(productionID int64) string {
+	return "/production/" + strconv.FormatInt(productionID, 10) + "/actors"
 }
 
 func (h *ActorHandler) renderActors(w http.ResponseWriter, r *http.Request, production *storage.Production, form ActorFormView) error {

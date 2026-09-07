@@ -6,6 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Costume Tree wardrobe operations workspace">
   <title>{{.Title}}</title>
+  <link rel="icon" href="/assets/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+  <link rel="manifest" href="/assets/site.webmanifest">
+  <meta name="theme-color" content="#fde047">
   <link rel="stylesheet" href="/assets/app.css">
   <script src="/assets/htmx.min.js" defer></script>
   <script src="/assets/alpine.min.js" defer></script>
@@ -14,150 +20,88 @@
   <header class="site-header">
     <div class="site-header__inner">
       <a class="brand" href="/" aria-label="Costume Tree home">
-        <span class="brand-mark" aria-hidden="true">CT</span>
+        <span class="brand-mark" aria-hidden="true"><img src="/assets/favicon-dark-32x32.png" alt="" width="32" height="32"></span>
         <span class="brand-copy">
           <span>Costume Tree</span>
           <small>Wardrobe operations</small>
         </span>
       </a>
       <div class="header-actions">
-        <span class="badge">Preview mode</span>
-        <a class="btn-brutal btn-cobalt" href="#add-piece">+ Add piece</a>
+        <a class="btn-brutal btn-cobalt" href="/production/new">+ New production</a>
       </div>
     </div>
   </header>
 
   <main class="page-shell">
-    <section class="page-intro" aria-labelledby="page-title">
-      <div>
-        <p class="eyebrow">Workspace / overview</p>
-        <h1 id="page-title">Make every costume cue count.</h1>
-        <p class="page-intro__copy">A clear, quick-glance workspace for tracking costume pieces from fitting room to stage.</p>
+    <!-- Option B: Split 50/50 Asymmetric Hero Showcase on Golden Field -->
+    <section class="hero-showcase" aria-labelledby="hero-title">
+      <div class="hero-showcase__copy">
+        <span class="hero-showcase__tag">Wardrobe operations</span>
+        <h1 class="hero-showcase__title" id="hero-title">Fast, phone-friendly costume tracking for stage productions.</h1>
+        <p class="hero-showcase__desc">Track physical pieces by performer, status, progress, and next decision — from fitting room to opening night.</p>
+        <div class="hero-showcase__actions">
+          <a class="btn-brutal btn-cobalt" href="/production/new">+ Start new production</a>
+          {{if .HasShows}}
+            <a class="btn-brutal btn-white" href="#shows-directory">Browse shows ({{.TotalShows}})</a>
+          {{end}}
+        </div>
       </div>
-      <p class="page-intro__note">This is a UI preview. Live inventory, actors, and progress will appear when a workspace is connected.</p>
-    </section>
-
-    <section class="kpi-row" aria-labelledby="kpi-title">
-      <h2 id="kpi-title" class="visually-hidden">Inventory overview</h2>
-      <article class="kpi-card highlight-blue">
-        <p class="kpi-title">Total pieces</p>
-        <strong class="kpi-val" aria-label="No data">—</strong>
-        <p class="kpi-sub">Awaiting inventory</p>
-      </article>
-      <article class="kpi-card highlight-mint">
-        <p class="kpi-title">Complete</p>
-        <strong class="kpi-val" aria-label="No data">—</strong>
-        <p class="kpi-sub">No completion data yet</p>
-      </article>
-      <article class="kpi-card highlight-yellow">
-        <p class="kpi-title">Active work</p>
-        <strong class="kpi-val" aria-label="No data">—</strong>
-        <p class="kpi-sub">Make, fit, and alteration work will show here</p>
-      </article>
-      <article class="kpi-card highlight-coral">
-        <p class="kpi-title">Blocked work</p>
-        <strong class="kpi-val" aria-label="No data">—</strong>
-        <p class="kpi-sub">No blockers reported</p>
-      </article>
-    </section>
-
-    <section class="toolbar-box" aria-labelledby="filter-title">
-      <div class="toolbar-copy">
-        <h2 id="filter-title">Filter inventory</h2>
-        <p>Find a piece or narrow the board by status.</p>
+      <div class="hero-showcase__graphic">
+        <div class="hero-showcase__frame">
+          <img src="/assets/costume-tree-hero.png" alt="CostumeTree Logo — Wardrobe Operations" width="340" height="288">
+        </div>
       </div>
-      <form class="filter-controls" action="/" method="get">
-        <label class="field-inline">
-          <span class="field-label">Search</span>
-          <input class="input-brutal" type="search" name="q" placeholder="Actor or piece name" autocomplete="off">
-        </label>
-        <label class="field-inline">
-          <span class="field-label">Status</span>
-          <select class="select-brutal" name="status">
-            <option value="">All statuses</option>
-            <option value="Find">Find</option>
-            <option value="Make">Make</option>
-            <option value="Fit">Fit</option>
-            <option value="Alterations">Alterations</option>
-            <option value="Complete">Complete</option>
-          </select>
-        </label>
-        <button class="btn-brutal btn-white btn-sm" type="submit">Apply filters</button>
-      </form>
     </section>
 
-    <section aria-labelledby="actors-title">
+    <!-- Shows / Productions Directory Section -->
+    <section id="shows-directory" class="form-section" aria-labelledby="shows-title">
       <div class="section-heading">
         <div>
-          <p class="section-kicker">Component preview</p>
-          <h2 id="actors-title">Actor progress</h2>
+          <p class="section-kicker">Active productions</p>
+          <h2 id="shows-title">Shows directory</h2>
         </div>
-        <p>Actor summaries and progress bars will populate from your connected production.</p>
+        <p>Select a show to jump straight to its dashboard or actor wardrobe roster.</p>
       </div>
 
-      <div class="actor-feed">
-        <article class="actor-block">
-          <header class="actor-summary-bar">
-            <div class="actor-info">
-              <span class="badge-icon" aria-hidden="true">?</span>
+      {{if .HasShows}}
+        <div class="shows-grid">
+          {{range .Shows}}
+            <article class="show-card" id="show-{{.ID}}">
               <div>
-                <h3 class="actor-name-text">No actor data yet</h3>
-                <p class="actor-role-text">Connect a workspace to see cast assignments.</p>
+                <div class="show-card__header">
+                  <h3 class="show-card__title">{{.Name}}</h3>
+                  <span class="badge">Active</span>
+                </div>
+                <div class="show-card__stats">
+                  <div class="show-card__stat-item">
+                    <span class="show-card__stat-label">Pieces</span>
+                    <span class="show-card__stat-value">{{.PieceCount}}</span>
+                  </div>
+                  <div class="show-card__stat-item">
+                    <span class="show-card__stat-label">Cast</span>
+                    <span class="show-card__stat-value">{{.ActorCount}}</span>
+                  </div>
+                  <div class="show-card__stat-item">
+                    <span class="show-card__stat-label">Blocked</span>
+                    <span class="show-card__stat-value" style="{{if gt .BlockedCount 0}}color: #b91c1c;{{end}}">{{.BlockedCount}}</span>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div class="actor-progress-meter" aria-label="Actor completion: no data">
-              <span class="status-brutal status-example">Empty state</span>
-              <div class="progress-bar-brutal" role="progressbar" aria-label="Actor completion" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                <span class="progress-fill-brutal" style="width: 0%"></span>
+              <div class="show-card__actions">
+                <a class="btn-brutal btn-cobalt btn-sm" href="{{.DashboardURL}}">Show detail</a>
+                <a class="btn-brutal btn-white btn-sm" href="{{.ActorsURL}}">Actor list</a>
               </div>
-              <span class="pct-label" aria-label="No percentage">—</span>
-            </div>
-          </header>
-
-          <div class="pieces-table-wrap">
-            <div class="pieces-label">
-              <span>Piece cards</span>
-              <span>Empty inventory</span>
-            </div>
-            <div class="status-legend" aria-label="Status palette preview">
-              <span class="status-legend-label">Status palette</span>
-              <span class="status-brutal status-example">Find</span>
-              <span class="status-brutal status-prog">Make</span>
-              <span class="status-brutal status-prog">Fit</span>
-              <span class="status-brutal status-block">Alterations</span>
-              <span class="status-brutal status-done">Complete</span>
-            </div>
-            <div class="pieces-grid">
-              <article class="piece-card-brutal">
-                <div class="piece-header">
-                  <span class="id-tag">PIECE-ID</span>
-                  <span class="status-brutal status-example">Example</span>
-                </div>
-                <div>
-                  <h3 class="piece-title">No costume pieces yet</h3>
-                  <p class="piece-description">Piece details, owner, and status appear in this card.</p>
-                </div>
-                <p class="piece-next">Next action will appear here.</p>
-              </article>
-              <article class="piece-card-brutal">
-                <div class="piece-header">
-                  <span class="id-tag">BLOCKER</span>
-                  <span class="status-brutal status-block">Example</span>
-                </div>
-                <div>
-                  <h3 class="piece-title">Blocker callout</h3>
-                  <p class="piece-description">Use a clear exception message when work cannot move forward.</p>
-                </div>
-                <aside class="blocker-alert">
-                  <strong>Blocker:</strong> Example callouts will identify the decision or part needed.
-                </aside>
-              </article>
-            </div>
-          </div>
+            </article>
+          {{end}}
+        </div>
+      {{else}}
+        <article class="form-card">
+          <p class="empty-state">No productions added yet. Click &ldquo;+ Start new production&rdquo; above to set up your first show.</p>
         </article>
-      </div>
+      {{end}}
     </section>
 
+    <!-- Component Preview Form (Preserves form & HTMX test scaffold) -->
     <section class="form-section" id="add-piece" aria-labelledby="form-title">
       <div class="section-heading">
         <div>
