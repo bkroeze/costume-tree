@@ -120,7 +120,7 @@ func New(logger *slog.Logger, dependencies Dependencies) (http.Handler, error) {
 		mux.Handle("POST /production/{production}/bulk", server.handle("bulk-import", bulkHandler.BulkImport))
 
 		mux.Handle("GET /production/{production}/actors/{actor}/items", server.handle("costume-items", costumeItemHandler.ListCostumeItems))
-		mux.Handle("POST /production/{production}/actors/{actor}/items", server.handle("costume-item-create", costumeItemHandler.CreateCostumeItem))
+		mux.Handle("POST /production/{production}/actors/{actor}/items/{item}/status", server.handle("costume-item-status", costumeItemHandler.UpdateCostumeItemStatus))
 		mux.Handle("GET /production/{production}/actors/{actor}/items/{item}", server.handle("costume-item", costumeItemHandler.DetailCostumeItem))
 		mux.Handle("GET /production/{production}/actors/{actor}/items/{item}/edit", server.handle("costume-item-edit", costumeItemHandler.EditCostumeItem))
 		mux.Handle("POST /production/{production}/actors/{actor}/items/{item}/edit", server.handle("costume-item-update", costumeItemHandler.EditCostumeItem))

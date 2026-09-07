@@ -251,6 +251,79 @@ func (h *CostumeItemHandler) DetailCostumeItem(w http.ResponseWriter, r *http.Re
 	return h.render(w, r, http.StatusOK, "costume-item-page", "costume-item-detail", model)
 }
 
+// UpdateCostumeItemStatus changes only an item's workflow status from the
+// actor's inventory list.
+func (h *CostumeItemHandler) UpdateCostumeItemStatus(w http.ResponseWriter, r *http.Request) error {
+	productionID, actorID, itemID, err := costumeItemIDs(r)
+	if err != nil {
+		return err
+	}
+	if r.Method != http.MethodPost {
+		return costumeItemMethodError("costume item status update requires POST")
+	}
+	production, actor, item, err := h.scopedItem(r.Context(), productionID, actorID, itemID)
+	if err != nil {
+		return err
+	}
+	if item.ArchivedAt != nil {
+		return h.storageError("update costume item status", storage.ErrArchived)
+	}
+	if err := r.ParseForm(); err != nil {
+		return &Error{Status: http.StatusBadRequest, Message: "Unable to read the costume item status.", Err: fmt.Errorf("parse costume item status: %w", err)}
+	}
+	status := strings.TrimSpace(r.FormValue("status"))
+	if !containsStatus(status) {
+		return h.statusUpdateError(w, r, production, actor, http.StatusUnprocessableEntity, "Choose a valid status.")
+	}
+	updatedAt := strings.TrimSpace(r.FormValue("updated_at"))
+	if updatedAt == "" || !sameTimestamp(updatedAt, item.UpdatedAt) {
+		return h.statusUpdateError(w, r, production, actor, http.StatusConflict, "This item changed in another window. Reload before saving.")
+	}
+	progress := item.Progress
+	if status == storage.StatusComplete {
+		progress = 100
+	}
+	updated, err := h.items.Update(r.Context(), storage.UpdateCostumeItemInput{
+		ProductionID: productionID, ID: item.ID, ActorID: actor.ID, ItemTypeID: item.ItemTypeID,
+		Description: item.Description, Status: status, Progress: progress, NextAction: item.NextAction,
+		Blocker: item.Blocker, Notes: item.Notes, ExpectedUpdatedAt: &item.UpdatedAt,
+	})
+	if err != nil {
+		return h.storageError("update costume item status", err)
+	}
+	SetTrigger(w, "costume-item:updated")
+	if IsHTMX(r) {
+		items, err := h.items.List(r.Context(), storage.CostumeItemFilter{ProductionID: productionID, ActorID: actorID})
+		if err != nil {
+			return h.storageError("list costume items", err)
+		}
+		model, err := h.listModel(r.Context(), production, actor, items)
+		if err != nil {
+			return err
+		}
+		model.Success = updated.Code + " updated."
+		return RenderFragment(w, h.pages, "costume-items-list", http.StatusOK, model)
+	}
+	Redirect(w, r, costumeItemListPath(productionID, actorID), http.StatusSeeOther)
+	return nil
+}
+
+func (h *CostumeItemHandler) statusUpdateError(w http.ResponseWriter, r *http.Request, production storage.Production, actor storage.Actor, status int, message string) error {
+	if !IsHTMX(r) {
+		return &Error{Status: status, Message: message, Err: errors.New("web: costume item status update rejected")}
+	}
+	items, err := h.items.List(r.Context(), storage.CostumeItemFilter{ProductionID: production.ID, ActorID: actor.ID})
+	if err != nil {
+		return h.storageError("list costume items", err)
+	}
+	model, err := h.listModel(r.Context(), production, actor, items)
+	if err != nil {
+		return err
+	}
+	model.Error = message
+	return RenderFragment(w, h.pages, "costume-items-list", status, model)
+}
+
 // CostumeItemPhotoGallery returns the production-, actor-, and item-scoped
 // gallery fragment used by the detail page's pending-photo poller.
 func (h *CostumeItemHandler) CostumeItemPhotoGallery(w http.ResponseWriter, r *http.Request) error {

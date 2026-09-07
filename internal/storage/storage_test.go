@@ -113,6 +113,48 @@ func TestForeignKeysAndProgressConstraints(t *testing.T) {
 	}
 }
 
+func TestCostumeItemListOrdersByWorkflowStatusThenID(t *testing.T) {
+	db, ctx := openTestDB(t)
+	production, err := NewProductionRepository(db).Create(ctx, CreateProductionInput{Name: "Macbeth"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor, err := NewActorRepository(db).Create(ctx, CreateActorInput{ProductionID: production.ID, Name: "Banquo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	itemType, err := NewItemTypeRepository(db).Create(ctx, CreateItemTypeInput{ProductionID: production.ID, Name: "Cloak"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := NewCostumeItemRepository(db)
+	inputs := []CreateCostumeItemInput{
+		{ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: itemType.ID, Status: StatusComplete, Progress: 100},
+		{ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: itemType.ID, Status: StatusFind},
+		{ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: itemType.ID, Status: StatusFit},
+		{ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: itemType.ID, Status: StatusMake},
+		{ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: itemType.ID, Status: StatusAlterations},
+	}
+	for _, input := range inputs {
+		if _, err := items.Create(ctx, input); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, err := items.List(ctx, CostumeItemFilter{ProductionID: production.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantStatuses := []string{StatusFind, StatusMake, StatusFit, StatusAlterations, StatusComplete}
+	if len(list) != len(wantStatuses) {
+		t.Fatalf("listed items = %d, want %d", len(list), len(wantStatuses))
+	}
+	for index, status := range wantStatuses {
+		if list[index].Status != status || list[index].ID != int64([]int{2, 4, 3, 5, 1}[index]) {
+			t.Fatalf("list[%d] = %#v, want id/status %d/%s", index, list[index], []int{2, 4, 3, 5, 1}[index], status)
+		}
+	}
+}
+
 func TestArchiveFiltersActiveRows(t *testing.T) {
 	db, ctx := openTestDB(t)
 	production, err := NewProductionRepository(db).Create(ctx, CreateProductionInput{Name: "Macbeth"})

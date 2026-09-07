@@ -143,7 +143,14 @@ func (q *ItemSearch) Search(ctx context.Context, filter ItemSearchFilter) ([]Ite
 		query += ` AND (instr(lower(a.name), ?) > 0 OR instr(lower(a.role), ?) > 0 OR instr(lower(it.name), ?) > 0 OR instr(lower(ci.description), ?) > 0)`
 		args = append(args, text, text, text, text)
 	}
-	query += ` ORDER BY ci.id LIMIT ? OFFSET ?`
+	query += ` ORDER BY CASE ci.status
+		WHEN 'Find' THEN 1
+		WHEN 'Make' THEN 2
+		WHEN 'Fit' THEN 3
+		WHEN 'Alterations' THEN 4
+		WHEN 'Complete' THEN 5
+		ELSE 6
+	END, ci.id LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 
 	rows, err := q.db.db.QueryContext(ctx, query, args...)

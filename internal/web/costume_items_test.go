@@ -259,6 +259,50 @@ func TestCostumeItemFormsUseNewStatusesAndDefaultToFind(t *testing.T) {
 	}
 }
 
+func TestCostumeItemStatusUpdateRendersSelectorAndPersistsImmediately(t *testing.T) {
+	h, production, actor, typ, ctx := costumeItemFixture(t)
+	item, err := h.items.Create(ctx, storage.CreateCostumeItemInput{
+		ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: typ.ID,
+		Status: storage.StatusFit, Progress: 50,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := httptest.NewRecorder()
+	if err := h.ListCostumeItems(list, costumeItemRequest(http.MethodGet, costumeItemListPath(production.ID, actor.ID), nil)); err != nil {
+		t.Fatal(err)
+	}
+	body := list.Body.String()
+	if !strings.Contains(body, `<details class="form-section">`) || strings.Contains(body, `<details class="form-section" open>`) {
+		t.Fatalf("new item form is not a closed accordion: %s", body)
+	}
+	if !strings.Contains(body, `name="status"`) || !strings.Contains(body, `Status for `+item.Code) {
+		t.Fatalf("item status selector missing: %s", body)
+	}
+	update := costumeItemRequest(http.MethodPost, costumeItemDetailPath(production.ID, actor.ID, item.ID)+"/status", url.Values{
+		"status":     {storage.StatusComplete},
+		"updated_at": {formatUpdatedAt(item.UpdatedAt)},
+	})
+	update.Header.Set("HX-Request", "true")
+	response := httptest.NewRecorder()
+	if err := h.UpdateCostumeItemStatus(response, update); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != http.StatusOK || response.Header().Get("HX-Trigger") != "costume-item:updated" {
+		t.Fatalf("status update response = %d trigger=%q body=%s", response.Code, response.Header().Get("HX-Trigger"), response.Body.String())
+	}
+	saved, err := h.items.Get(ctx, production.ID, item.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Status != storage.StatusComplete || saved.Progress != 100 {
+		t.Fatalf("saved item = %#v, want Complete at 100%%", saved)
+	}
+	if !strings.Contains(response.Body.String(), `<option value="Complete" selected>Complete</option>`) {
+		t.Fatalf("updated selector missing Complete selection: %s", response.Body.String())
+	}
+}
+
 func TestCostumeItemListShowsFirstReadyPhotoThumbnail(t *testing.T) {
 	h, production, actor, typ, ctx := costumeItemFixture(t)
 	firstItem, err := h.items.Create(ctx, storage.CreateCostumeItemInput{ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: typ.ID, Description: "First"})

@@ -1165,6 +1165,9 @@ details > summary:focus-visible {
   align-items: center;
   gap: 0.5rem;
 }
+.item-status-form .select-brutal {
+  width: auto;
+}
 
 .costume-item-code {
   display: inline-flex;
@@ -1184,6 +1187,7 @@ details > summary:focus-visible {
 
   .item-type-row form,
   .item-type-row form .input-brutal,
+  .item-type-row form .select-brutal,
   .item-type-row form .btn-brutal {
     width: 100%;
   }

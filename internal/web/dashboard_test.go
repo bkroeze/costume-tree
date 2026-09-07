@@ -88,7 +88,25 @@ func TestDashboardAndWorkspaceRenderActiveData(t *testing.T) {
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Macbeth dashboard") || !strings.Contains(response.Body.String(), "Ada") || !strings.Contains(response.Body.String(), "25%") || !strings.Contains(response.Body.String(), "Blocked by notes: 1") {
 		t.Fatalf("dashboard response = %d %s", response.Code, response.Body.String())
 	}
-	assertWorkflowStatusOptions(t, response.Body.String())
+	body := response.Body.String()
+	legendStart := strings.Index(body, `<div class="status-legend">`)
+	if legendStart < 0 {
+		t.Fatalf("actor status legend missing: %s", body)
+	}
+	legendEnd := strings.Index(body[legendStart:], `</div>`)
+	if legendEnd < 0 {
+		t.Fatalf("actor status legend is incomplete: %s", body)
+	}
+	legend := body[legendStart : legendStart+legendEnd]
+	offset := 0
+	for _, statusCount := range []string{"Fit 0", "Find 0", "Make 1", "Alterations 0", "Complete 0"} {
+		index := strings.Index(legend[offset:], statusCount)
+		if index < 0 {
+			t.Fatalf("actor status count %q missing or out of order: %s", statusCount, legend)
+		}
+		offset += index + len(statusCount)
+	}
+	assertWorkflowStatusOptions(t, body)
 	for _, label := range []string{"Total", "Complete", "Active work", "Blocked"} {
 		if !strings.Contains(response.Body.String(), `<p class="kpi-title">`+label+`</p>`) {
 			t.Fatalf("KPI %q missing in %s", label, response.Body.String())

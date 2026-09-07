@@ -655,7 +655,14 @@ func (r *costumeItemRepository) List(ctx context.Context, filter CostumeItemFilt
 	if filter.Blocked {
 		query += ` AND length(trim(blocker)) > 0`
 	}
-	query += ` ORDER BY id`
+	query += ` ORDER BY CASE status
+		WHEN 'Find' THEN 1
+		WHEN 'Make' THEN 2
+		WHEN 'Fit' THEN 3
+		WHEN 'Alterations' THEN 4
+		WHEN 'Complete' THEN 5
+		ELSE 6
+	END, id`
 	rows, err := r.db.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("storage: list costume items: %w", err)

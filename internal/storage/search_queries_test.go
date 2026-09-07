@@ -77,7 +77,7 @@ func TestItemSearchFiltersAndProductionScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(all) != 3 || all[0].ID != lead.ID || all[1].ID != maskItem.ID || all[2].ID != complete.ID {
+	if len(all) != 3 || all[0].ID != maskItem.ID || all[1].ID != lead.ID || all[2].ID != complete.ID {
 		t.Fatalf("active results = %#v", all)
 	}
 
@@ -103,7 +103,7 @@ func TestItemSearchFiltersAndProductionScope(t *testing.T) {
 				t.Fatal(err)
 			}
 			if check.name == "incomplete" {
-				if len(got) != 2 || got[0].ID != lead.ID || got[1].ID != maskItem.ID {
+				if len(got) != 2 || got[0].ID != maskItem.ID || got[1].ID != lead.ID {
 					t.Fatalf("results = %#v, want incomplete active items", got)
 				}
 				return
