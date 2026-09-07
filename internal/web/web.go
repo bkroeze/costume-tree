@@ -55,8 +55,13 @@ type demoState struct {
 }
 
 type pageModel struct {
-	Title string
-	Demo  demoState
+	Title       string
+	Shows       []ShowCardView
+	HasShows    bool
+	TotalShows  int
+	TotalActors int
+	TotalPieces int
+	Demo        demoState
 }
 
 // New constructs the application HTTP handler from embedded content and its
@@ -94,8 +99,9 @@ func New(logger *slog.Logger, dependencies Dependencies) (http.Handler, error) {
 		searchHandler := NewItemSearchHandler(productions, storage.NewItemSearchRepository(database), pages)
 		summaryHandler := NewItemTypeSummaryHandler(productions, storage.NewItemTypeSummaryRepository(database), pages)
 		bulkHandler := NewBulkImportHandler(productions, storage.NewBulkImporter(database), pages)
+		landingHandler := NewLandingHandler(productions, actors, storage.NewDashboardQueries(database), pages)
 
-		mux.Handle("GET /{$}", server.handle("production", actorHandler.Production))
+		mux.Handle("GET /{$}", server.handle("landing", landingHandler.Landing))
 		mux.Handle("GET /production", server.handle("production", actorHandler.Production))
 		mux.Handle("POST /production", server.handle("production", actorHandler.Production))
 		mux.Handle("GET /actors", server.handle("actors", actorHandler.Actors))
