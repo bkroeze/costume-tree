@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"sort"
 	"strconv"
 
 	"costume-tree/internal/storage"
@@ -38,24 +37,18 @@ type LandingPageModel struct {
 // showcase and the directory linking to all productions, their dashboard
 // detail pages, and their actor list pages.
 type LandingHandler struct {
-	productions storage.ProductionRepository
-	actors      storage.ActorRepository
-	queries     storage.DashboardQueries
-	pages       *template.Template
+	directory storage.ProductionDirectoryQueries
+	pages     *template.Template
 }
 
 // NewLandingHandler constructs a new LandingHandler.
 func NewLandingHandler(
-	productions storage.ProductionRepository,
-	actors storage.ActorRepository,
-	queries storage.DashboardQueries,
+	directory storage.ProductionDirectoryQueries,
 	pages *template.Template,
 ) *LandingHandler {
 	return &LandingHandler{
-		productions: productions,
-		actors:      actors,
-		queries:     queries,
-		pages:       pages,
+		directory: directory,
+		pages:     pages,
 	}
 }
 
@@ -71,64 +64,28 @@ func (h *LandingHandler) render(w http.ResponseWriter, r *http.Request, status i
 		Demo:  demo,
 	}
 
-	if h.productions != nil {
-		productions, err := h.productions.List(ctx)
+	if h.directory != nil {
+		entries, err := h.directory.ProductionDirectory(ctx)
 		if err != nil {
 			return &Error{
 				Status:  http.StatusInternalServerError,
-				Message: "Unable to list productions.",
-				Err:     fmt.Errorf("landing: list productions: %w", err),
+				Message: "Unable to load the production directory.",
+				Err:     fmt.Errorf("landing: load production directory: %w", err),
 			}
 		}
 
-		// Sort productions alphabetically
-		sort.SliceStable(productions, func(i, j int) bool {
-			if productions[i].Name == productions[j].Name {
-				return productions[i].ID < productions[j].ID
-			}
-			return productions[i].Name < productions[j].Name
-		})
-
-		for _, prod := range productions {
-			if prod.ArchivedAt != nil {
-				continue
-			}
-
+		for _, entry := range entries {
 			card := ShowCardView{
-				ID:           prod.ID,
-				Name:         prod.Name,
-				Archived:     prod.ArchivedAt != nil,
-				DashboardURL: "/production/" + strconv.FormatInt(prod.ID, 10) + "/dashboard",
-				ActorsURL:    "/production/" + strconv.FormatInt(prod.ID, 10) + "/actors",
+				ID:           entry.ID,
+				Name:         entry.Name,
+				ActorCount:   entry.ActorCount,
+				PieceCount:   entry.PieceCount,
+				BlockedCount: entry.BlockedCount,
+				DashboardURL: "/production/" + strconv.FormatInt(entry.ID, 10) + "/dashboard",
+				ActorsURL:    "/production/" + strconv.FormatInt(entry.ID, 10) + "/actors",
 			}
-
-			if h.actors != nil {
-				actList, err := h.actors.List(ctx, prod.ID, false)
-				if err != nil {
-					return &Error{
-						Status:  http.StatusInternalServerError,
-						Message: "Unable to list actors.",
-						Err:     fmt.Errorf("landing: list actors for production %d: %w", prod.ID, err),
-					}
-				}
-				card.ActorCount = len(actList)
-				model.TotalActors += len(actList)
-			}
-
-			if h.queries != nil {
-				kpis, err := h.queries.ProductionKPIs(ctx, prod.ID)
-				if err != nil {
-					return &Error{
-						Status:  http.StatusInternalServerError,
-						Message: "Unable to load production totals.",
-						Err:     fmt.Errorf("landing: load KPIs for production %d: %w", prod.ID, err),
-					}
-				}
-				card.PieceCount = kpis.TotalActivePieces
-				card.BlockedCount = kpis.Blocked
-				model.TotalPieces += kpis.TotalActivePieces
-			}
-
+			model.TotalActors += entry.ActorCount
+			model.TotalPieces += entry.PieceCount
 			model.Shows = append(model.Shows, card)
 		}
 		model.TotalShows = len(model.Shows)

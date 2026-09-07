@@ -15,22 +15,12 @@ import (
 	"costume-tree/internal/storage"
 )
 
-type failingActorRepository struct {
-	storage.ActorRepository
+type failingDirectoryQueries struct {
 	err error
 }
 
-func (r failingActorRepository) List(context.Context, int64, ...bool) ([]storage.Actor, error) {
-	return nil, r.err
-}
-
-type failingDashboardQueries struct {
-	storage.DashboardQueries
-	err error
-}
-
-func (q failingDashboardQueries) ProductionKPIs(context.Context, int64) (storage.ProductionKPIs, error) {
-	return storage.ProductionKPIs{}, q.err
+func (q failingDirectoryQueries) ProductionDirectory(context.Context) ([]storage.ProductionDirectoryEntry, error) {
+	return nil, q.err
 }
 
 func TestLandingPageHeroAndShowsDirectory(t *testing.T) {
@@ -155,33 +145,10 @@ func TestLandingPageHeroAndShowsDirectory(t *testing.T) {
 }
 
 func TestLandingPropagatesDirectoryQueryFailures(t *testing.T) {
-	db, err := storage.Open(filepath.Join(t.TempDir(), "costume-tree.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	if err := db.Migrate(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	productions := storage.NewProductionRepository(db)
-	if _, err := productions.Create(context.Background(), storage.CreateProductionInput{Name: "Macbeth"}); err != nil {
-		t.Fatal(err)
-	}
 	sentinel := errors.New("query failed")
-
-	t.Run("actors", func(t *testing.T) {
-		handler := NewLandingHandler(productions, failingActorRepository{err: sentinel}, nil, nil)
-		err := handler.Landing(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
-		if !errors.Is(err, sentinel) {
-			t.Fatalf("Landing() error = %v, want actor query failure", err)
-		}
-	})
-
-	t.Run("KPIs", func(t *testing.T) {
-		handler := NewLandingHandler(productions, storage.NewActorRepository(db), failingDashboardQueries{err: sentinel}, nil)
-		err := handler.Landing(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
-		if !errors.Is(err, sentinel) {
-			t.Fatalf("Landing() error = %v, want KPI query failure", err)
-		}
-	})
+	handler := NewLandingHandler(failingDirectoryQueries{err: sentinel}, nil)
+	err := handler.Landing(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("Landing() error = %v, want directory query failure", err)
+	}
 }

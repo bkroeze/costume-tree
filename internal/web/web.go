@@ -91,7 +91,7 @@ func New(logger *slog.Logger, dependencies Dependencies) (http.Handler, error) {
 		searchHandler := NewItemSearchHandler(productions, storage.NewItemSearchRepository(database), pages)
 		summaryHandler := NewItemTypeSummaryHandler(productions, storage.NewItemTypeSummaryRepository(database), pages)
 		bulkHandler := NewBulkImportHandler(productions, storage.NewBulkImporter(database), pages)
-		landingHandler := NewLandingHandler(productions, actors, storage.NewDashboardQueries(database), pages)
+		landingHandler := NewLandingHandler(storage.NewProductionDirectoryQueries(database), pages)
 		server.landing = landingHandler
 
 		mux.Handle("GET /{$}", server.handle("landing", landingHandler.Landing))
