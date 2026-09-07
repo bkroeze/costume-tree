@@ -78,6 +78,9 @@ func TestProductionBootstrapAndActorLifecycle(t *testing.T) {
 	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), "Banquo") || !strings.Contains(list.Body.String(), "Thane") {
 		t.Fatalf("actor list = %d %s", list.Code, list.Body.String())
 	}
+	if !strings.Contains(list.Body.String(), `href="/actors/1">Edit</a>`) {
+		t.Fatalf("actor edit link missing or incorrect: %s", list.Body.String())
+	}
 }
 
 func TestActorHTMXValidationAndArchive(t *testing.T) {

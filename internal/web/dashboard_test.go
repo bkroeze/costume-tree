@@ -46,7 +46,7 @@ func dashboardFixture(t *testing.T) (*DashboardHandler, storage.Production, stor
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := NewDashboardHandler(productions, actors, items, storage.NewDashboardQueries(db))
+	h := NewDashboardHandler(productions, actors, types, items, storage.NewDashboardQueries(db))
 	return h, production, actor, item, func() { _ = db.Close() }
 }
 
@@ -79,7 +79,7 @@ func assertWorkflowStatusOptions(t *testing.T, body string) {
 }
 
 func TestDashboardAndWorkspaceRenderActiveData(t *testing.T) {
-	h, production, actor, _, cleanup := dashboardFixture(t)
+	h, production, actor, item, cleanup := dashboardFixture(t)
 	defer cleanup()
 	response := httptest.NewRecorder()
 	if err := h.Dashboard(response, httptest.NewRequest(http.MethodGet, "/production/"+strconv.FormatInt(production.ID, 10)+"/dashboard", nil)); err != nil {
@@ -89,6 +89,17 @@ func TestDashboardAndWorkspaceRenderActiveData(t *testing.T) {
 		t.Fatalf("dashboard response = %d %s", response.Code, response.Body.String())
 	}
 	body := response.Body.String()
+	if !strings.Contains(body, `<a class="badge" href="/production/`+strconv.FormatInt(production.ID, 10)+`/dashboard">Macbeth</a>`) {
+		t.Fatalf("production badge does not link to dashboard: %s", body)
+	}
+	for _, want := range []string{
+		`href="/production/` + strconv.FormatInt(production.ID, 10) + `/summary"`,
+		`href="/production/` + strconv.FormatInt(production.ID, 10) + `/items"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("dashboard data view link %q missing: %s", want, body)
+		}
+	}
 	legendStart := strings.Index(body, `<div class="status-legend">`)
 	if legendStart < 0 {
 		t.Fatalf("actor status legend missing: %s", body)
@@ -116,17 +127,22 @@ func TestDashboardAndWorkspaceRenderActiveData(t *testing.T) {
 	if err := h.Workspace(workspace, httptest.NewRequest(http.MethodGet, "/production/"+strconv.FormatInt(production.ID, 10)+"/workspace/"+strconv.FormatInt(actor.ID, 10), nil)); err != nil {
 		t.Fatal(err)
 	}
-	if workspace.Code != http.StatusOK || !strings.Contains(workspace.Body.String(), "C-0001") || !strings.Contains(workspace.Body.String(), "25") || !strings.Contains(workspace.Body.String(), "Waiting for fabric") {
-		t.Fatalf("workspace response = %d %s", workspace.Code, workspace.Body.String())
+	workspaceBody := workspace.Body.String()
+	wantEditURL := `/production/` + strconv.FormatInt(production.ID, 10) + `/actors/` + strconv.FormatInt(actor.ID, 10) + `/items/` + strconv.FormatInt(item.ID, 10) + `/edit`
+	if !strings.Contains(workspaceBody, `class="id-tag" href="`+wantEditURL+`">`+item.Code+`</a>`) {
+		t.Fatalf("workspace item id does not link to edit: %s", workspaceBody)
 	}
-	assertWorkflowStatusOptions(t, workspace.Body.String())
+	if workspace.Code != http.StatusOK || !strings.Contains(workspaceBody, "C-0001") || !strings.Contains(workspaceBody, "25") || !strings.Contains(workspaceBody, "Waiting for fabric") || !strings.Contains(workspaceBody, "Cloak:") || !strings.Contains(workspaceBody, `name="description"`) || !strings.Contains(workspaceBody, `placeholder="No description"`) || strings.Contains(workspaceBody, `<span class="status-brutal status-example">Make</span>`) {
+		t.Fatalf("workspace response = %d %s", workspace.Code, workspaceBody)
+	}
+	assertWorkflowStatusOptions(t, workspaceBody)
 }
 
 func TestWorkspaceRejectsStaleTimestampAndUpdatesStatus(t *testing.T) {
 	h, production, actor, item, cleanup := dashboardFixture(t)
 	defer cleanup()
 	path := "/production/" + strconv.FormatInt(production.ID, 10) + "/workspace/" + strconv.FormatInt(actor.ID, 10)
-	stale := dashboardRequest(http.MethodPost, path, url.Values{"item_id": {strconv.FormatInt(item.ID, 10)}, "updated_at": {"2000-01-01T00:00:00Z"}, "status": {storage.StatusAlterations}, "progress": {"10"}})
+	stale := dashboardRequest(http.MethodPost, path, url.Values{"item_id": {strconv.FormatInt(item.ID, 10)}, "updated_at": {"2000-01-01T00:00:00Z"}, "description": {"Changed description"}, "status": {storage.StatusAlterations}, "progress": {"10"}})
 	response := httptest.NewRecorder()
 	if err := h.Workspace(response, stale); err != nil {
 		t.Fatal(err)
@@ -135,7 +151,7 @@ func TestWorkspaceRejectsStaleTimestampAndUpdatesStatus(t *testing.T) {
 		t.Fatalf("stale response = %d %s", response.Code, response.Body.String())
 	}
 	current := item.UpdatedAt.UTC().Format(time.RFC3339Nano)
-	updated := dashboardRequest(http.MethodPost, path, url.Values{"item_id": {strconv.FormatInt(item.ID, 10)}, "updated_at": {current}, "status": {storage.StatusAlterations}, "progress": {"10"}})
+	updated := dashboardRequest(http.MethodPost, path, url.Values{"item_id": {strconv.FormatInt(item.ID, 10)}, "updated_at": {current}, "description": {"Changed description"}, "status": {storage.StatusAlterations}, "progress": {"10"}})
 	response = httptest.NewRecorder()
 	if err := h.Workspace(response, updated); err != nil {
 		t.Fatal(err)
@@ -147,12 +163,12 @@ func TestWorkspaceRejectsStaleTimestampAndUpdatesStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.Status != storage.StatusAlterations || saved.Blocker != "Waiting for fabric" {
+	if saved.Status != storage.StatusAlterations || saved.Progress != 75 || saved.Description != "Changed description" || saved.Blocker != "Waiting for fabric" {
 		t.Fatalf("updated item = %#v", saved)
 	}
 }
 
-func TestWorkspaceRequiresFullProgressForComplete(t *testing.T) {
+func TestWorkspaceStatusChangeAutomaticallySetsProgress(t *testing.T) {
 	h, production, actor, item, cleanup := dashboardFixture(t)
 	defer cleanup()
 	path := "/production/" + strconv.FormatInt(production.ID, 10) + "/workspace/" + strconv.FormatInt(actor.ID, 10)
@@ -166,15 +182,15 @@ func TestWorkspaceRequiresFullProgressForComplete(t *testing.T) {
 	if err := h.Workspace(response, request); err != nil {
 		t.Fatal(err)
 	}
-	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "Complete items must be at 100%.") {
-		t.Fatalf("complete response = %d %s", response.Code, response.Body.String())
+	if response.Code != http.StatusSeeOther || response.Header().Get("Location") != path {
+		t.Fatalf("complete response = %d location %q", response.Code, response.Header().Get("Location"))
 	}
 	saved, err := h.items.Get(context.Background(), production.ID, item.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.Status != storage.StatusMake {
-		t.Fatalf("status after rejected update = %q", saved.Status)
+	if saved.Status != storage.StatusComplete || saved.Progress != 100 {
+		t.Fatalf("completed item = %#v", saved)
 	}
 }
 

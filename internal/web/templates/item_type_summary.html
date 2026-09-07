@@ -12,7 +12,7 @@
 <body>
   <header class="site-header"><div class="site-header__inner">
     <a class="brand" href="/" aria-label="Costume Tree home"><span class="brand-mark" aria-hidden="true">CT</span><span class="brand-copy"><span>Costume Tree</span><small>Wardrobe operations</small></span></a>
-    <span class="badge">{{.Production.Name}}</span>
+    <a class="badge" href="/production/{{.Production.ID}}/dashboard">{{.Production.Name}}</a>
   </div></header>
   <main class="page-shell" id="item-type-summary-page">
     <section class="page-intro" aria-labelledby="item-type-summary-title">

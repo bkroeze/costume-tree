@@ -33,6 +33,7 @@ type DashboardPageModel struct {
 type WorkspaceItemView struct {
 	ID          int64
 	Code        string
+	ItemType    string
 	Description string
 	Status      string
 	Progress    int
@@ -62,6 +63,7 @@ type WorkspacePageModel struct {
 type DashboardHandler struct {
 	productions storage.ProductionRepository
 	actors      storage.ActorRepository
+	itemTypes   storage.ItemTypeRepository
 	items       storage.CostumeItemRepository
 	queries     storage.DashboardQueries
 	pages       *template.Template
@@ -70,7 +72,7 @@ type DashboardHandler struct {
 // NewDashboardHandler constructs dashboard and workspace handlers. A supplied
 // template set is extended with dashboard templates; when omitted, this
 // feature parses its own templates.
-func NewDashboardHandler(productions storage.ProductionRepository, actors storage.ActorRepository, items storage.CostumeItemRepository, queries storage.DashboardQueries, pages ...*template.Template) *DashboardHandler {
+func NewDashboardHandler(productions storage.ProductionRepository, actors storage.ActorRepository, itemTypes storage.ItemTypeRepository, items storage.CostumeItemRepository, queries storage.DashboardQueries, pages ...*template.Template) *DashboardHandler {
 	parsed := mustDashboardTemplates()
 	if len(pages) > 0 && pages[0] != nil {
 		parsed = pages[0]
@@ -78,12 +80,12 @@ func NewDashboardHandler(productions storage.ProductionRepository, actors storag
 			parsed = mustDashboardTemplates()
 		}
 	}
-	return &DashboardHandler{productions: productions, actors: actors, items: items, queries: queries, pages: parsed}
+	return &DashboardHandler{productions: productions, actors: actors, itemTypes: itemTypes, items: items, queries: queries, pages: parsed}
 }
 
 // NewProductionDashboardHandler is a descriptive constructor alias.
-func NewProductionDashboardHandler(productions storage.ProductionRepository, actors storage.ActorRepository, items storage.CostumeItemRepository, queries storage.DashboardQueries, pages ...*template.Template) *DashboardHandler {
-	return NewDashboardHandler(productions, actors, items, queries, pages...)
+func NewProductionDashboardHandler(productions storage.ProductionRepository, actors storage.ActorRepository, itemTypes storage.ItemTypeRepository, items storage.CostumeItemRepository, queries storage.DashboardQueries, pages ...*template.Template) *DashboardHandler {
+	return NewDashboardHandler(productions, actors, itemTypes, items, queries, pages...)
 }
 
 func mustDashboardTemplates() *template.Template {
@@ -177,6 +179,7 @@ func (h *DashboardHandler) Workspace(w http.ResponseWriter, r *http.Request) err
 	if status == "" {
 		status = item.Status
 	}
+	description := strings.TrimSpace(r.FormValue("description"))
 	progress := item.Progress
 	if value := strings.TrimSpace(r.FormValue("progress")); value != "" {
 		progress, err = strconv.Atoi(value)
@@ -187,12 +190,15 @@ func (h *DashboardHandler) Workspace(w http.ResponseWriter, r *http.Request) err
 	if !containsStatus(status) {
 		return h.workspaceValidation(w, r, production, actor, "Choose a valid status.", "status")
 	}
+	if status != item.Status {
+		progress = workspaceProgress(status)
+	}
 	if status == storage.StatusComplete && progress != 100 {
 		return h.workspaceValidation(w, r, production, actor, "Complete items must be at 100%.", "progress")
 	}
 	updated, err := h.items.Update(r.Context(), storage.UpdateCostumeItemInput{
 		ProductionID: productionID, ID: item.ID, ActorID: actorID, ItemTypeID: item.ItemTypeID,
-		Description: item.Description, Status: status, Progress: progress, NextAction: item.NextAction,
+		Description: description, Status: status, Progress: progress, NextAction: item.NextAction,
 		Blocker: item.Blocker, Notes: item.Notes, ExpectedUpdatedAt: &item.UpdatedAt,
 	})
 	if err != nil {
@@ -245,12 +251,20 @@ func (h *DashboardHandler) scope(ctx context.Context, productionID, actorID int6
 }
 
 func (h *DashboardHandler) renderWorkspace(w http.ResponseWriter, r *http.Request, status int, production storage.Production, actor storage.Actor, overlay WorkspacePageModel) error {
-	if h.items == nil {
-		return dashboardStorageError("list workspace items", errors.New("web: costume item repository is required"))
+	if h.items == nil || h.itemTypes == nil {
+		return dashboardStorageError("list workspace items", errors.New("web: costume item and item type repositories are required"))
 	}
 	items, err := h.items.List(r.Context(), storage.CostumeItemFilter{ProductionID: production.ID, ActorID: actor.ID})
 	if err != nil {
 		return dashboardStorageError("list workspace items", err)
+	}
+	itemTypes, err := h.itemTypes.List(r.Context(), production.ID, true)
+	if err != nil {
+		return dashboardStorageError("list workspace item types", err)
+	}
+	itemTypeNames := make(map[int64]string, len(itemTypes))
+	for _, itemType := range itemTypes {
+		itemTypeNames[itemType.ID] = itemType.Name
 	}
 	model := overlay
 	model.Title = "Workspace · " + actor.Name
@@ -259,7 +273,11 @@ func (h *DashboardHandler) renderWorkspace(w http.ResponseWriter, r *http.Reques
 	model.Statuses = costumeItemStatuses
 	model.Items = make([]WorkspaceItemView, 0, len(items))
 	for _, item := range items {
-		model.Items = append(model.Items, WorkspaceItemView{ID: item.ID, Code: item.Code, Description: item.Description, Status: item.Status, Progress: item.Progress, NextAction: item.NextAction, Blocker: item.Blocker, Blocked: strings.TrimSpace(item.Blocker) != "", Notes: item.Notes, UpdatedAt: formatUpdatedAt(item.UpdatedAt)})
+		itemType := itemTypeNames[item.ItemTypeID]
+		if itemType == "" {
+			itemType = "Costume item"
+		}
+		model.Items = append(model.Items, WorkspaceItemView{ID: item.ID, Code: item.Code, ItemType: itemType, Description: item.Description, Status: item.Status, Progress: item.Progress, NextAction: item.NextAction, Blocker: item.Blocker, Blocked: strings.TrimSpace(item.Blocker) != "", Notes: item.Notes, UpdatedAt: formatUpdatedAt(item.UpdatedAt)})
 	}
 	model.Empty = len(model.Items) == 0
 	return h.render(w, r, status, "workspace-page", "workspace-content", model)
@@ -300,6 +318,23 @@ func dashboardStorageError(operation string, err error) error {
 
 func dashboardMethodError(detail string) error {
 	return &Error{Status: http.StatusMethodNotAllowed, Message: "Method not allowed.", Err: errors.New("web: " + detail)}
+}
+
+func workspaceProgress(status string) int {
+	switch status {
+	case storage.StatusFind:
+		return 0
+	case storage.StatusMake:
+		return 25
+	case storage.StatusFit:
+		return 50
+	case storage.StatusAlterations:
+		return 75
+	case storage.StatusComplete:
+		return 100
+	default:
+		return 0
+	}
 }
 
 func dashboardScopeIDs(r *http.Request) (int64, int64, error) {

@@ -90,7 +90,7 @@ func New(logger *slog.Logger, dependencies Dependencies) (http.Handler, error) {
 		actorHandler := NewActorHandler(productions, actors, pages, itemTypes)
 		itemTypeHandler := NewItemTypeHandler(productions, itemTypes, pages)
 		costumeItemHandler := NewCostumeItemHandler(productions, actors, itemTypes, costumeItems, pages, dependencies.Photos)
-		dashboardHandler := NewDashboardHandler(productions, actors, costumeItems, storage.NewDashboardQueries(database), pages)
+		dashboardHandler := NewDashboardHandler(productions, actors, itemTypes, costumeItems, storage.NewDashboardQueries(database), pages)
 		searchHandler := NewItemSearchHandler(productions, storage.NewItemSearchRepository(database), pages)
 		summaryHandler := NewItemTypeSummaryHandler(productions, storage.NewItemTypeSummaryRepository(database), pages)
 		bulkHandler := NewBulkImportHandler(productions, storage.NewBulkImporter(database), pages)

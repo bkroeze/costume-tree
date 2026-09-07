@@ -203,6 +203,11 @@ h3 {
   box-shadow: 2px 2px 0 var(--border);
 }
 
+a.badge {
+  color: var(--ink);
+  text-decoration: none;
+}
+
 .page-shell {
   padding-block: 2.5rem 4rem;
 }
