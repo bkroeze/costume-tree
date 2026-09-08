@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -27,6 +29,60 @@ var costumeItemStatuses = []string{
 	storage.StatusFit,
 	storage.StatusAlterations,
 	storage.StatusComplete,
+}
+
+const (
+	copiedCostumeItemsCookie = "costume_tree_copied_items"
+	copiedCostumeItemsMaxAge = 30 * 24 * 60 * 60
+)
+
+type copiedCostumeItem struct {
+	ItemTypeID  int64  `json:"item_type_id"`
+	Description string `json:"description"`
+}
+
+func setCopiedCostumeItemsCookie(w http.ResponseWriter, items []copiedCostumeItem) error {
+	data, err := json.Marshal(items)
+	if err != nil {
+		return fmt.Errorf("marshal copied costume items: %w", err)
+	}
+	value := base64.RawURLEncoding.EncodeToString(data)
+	if len(value) > 3800 {
+		return errors.New("copied costume items exceed cookie capacity")
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     copiedCostumeItemsCookie,
+		Value:    value,
+		Path:     "/",
+		MaxAge:   copiedCostumeItemsMaxAge,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	return nil
+}
+
+func copiedCostumeItemsFromCookie(r *http.Request) ([]copiedCostumeItem, error) {
+	cookie, err := r.Cookie(copiedCostumeItemsCookie)
+	if errors.Is(err, http.ErrNoCookie) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read copied costume items cookie: %w", err)
+	}
+	data, err := base64.RawURLEncoding.DecodeString(cookie.Value)
+	if err != nil {
+		return nil, fmt.Errorf("decode copied costume items cookie: %w", err)
+	}
+	var items []copiedCostumeItem
+	if err := json.Unmarshal(data, &items); err != nil {
+		return nil, fmt.Errorf("unmarshal copied costume items cookie: %w", err)
+	}
+	for _, item := range items {
+		if item.ItemTypeID <= 0 {
+			return nil, errors.New("copied costume items cookie contains an invalid item type")
+		}
+	}
+	return items, nil
 }
 
 const costumeItemMultipartMemory = 8 << 20
@@ -83,22 +139,23 @@ type CostumeItemPhotoView struct {
 	ThumbnailURL string
 }
 type CostumeItemPageModel struct {
-	Title      string
-	Production storage.Production
-	Actor      storage.Actor
-	Actors     []storage.Actor
-	ItemTypes  []storage.ItemType
-	Items      []CostumeItemView
-	Archived   []CostumeItemView
-	Item       *CostumeItemView
-	Form       CostumeItemFormView
-	Statuses   []string
-	Photos     []CostumeItemPhotoView
-	HasPending bool
-	Error      string
-	Success    string
-	Lookup     string
-	Empty      bool
+	Title          string
+	Production     storage.Production
+	Actor          storage.Actor
+	Actors         []storage.Actor
+	ItemTypes      []storage.ItemType
+	Items          []CostumeItemView
+	Archived       []CostumeItemView
+	Item           *CostumeItemView
+	Form           CostumeItemFormView
+	Statuses       []string
+	Photos         []CostumeItemPhotoView
+	HasPending     bool
+	HasCopiedItems bool
+	Error          string
+	Success        string
+	Lookup         string
+	Empty          bool
 }
 
 // CostumeItemHandler owns production- and actor-scoped costume item HTTP behavior.
@@ -153,11 +210,136 @@ func (h *CostumeItemHandler) ListCostumeItems(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		return h.storageError("list costume items", err)
 	}
-	model, err := h.listModel(r.Context(), production, actor, items)
+	model, err := h.listModel(r, production, actor, items)
 	if err != nil {
 		return err
 	}
 	return h.render(w, r, http.StatusOK, "costume-items-page", "costume-items-list", model)
+}
+
+// CopyCostumeItems stores the selected items' type and description in a
+// browser cookie for later pasting into an actor's inventory.
+func (h *CostumeItemHandler) CopyCostumeItems(w http.ResponseWriter, r *http.Request) error {
+	productionID, actorID, err := costumeItemScopeIDs(r)
+	if err != nil {
+		return err
+	}
+	if r.Method != http.MethodPost {
+		return costumeItemMethodError("costume item copy requires POST")
+	}
+	production, actor, err := h.scope(r.Context(), productionID, actorID)
+	if err != nil {
+		return err
+	}
+	if err := r.ParseForm(); err != nil {
+		return &Error{Status: http.StatusBadRequest, Message: "Unable to read the selected costume items.", Err: fmt.Errorf("parse costume item copy form: %w", err)}
+	}
+	selected := r.Form["selected_items"]
+	if len(selected) == 0 {
+		return h.itemListActionError(w, r, production, actor, http.StatusUnprocessableEntity, "Select at least one costume item to copy.")
+	}
+	copied := make([]copiedCostumeItem, 0, len(selected))
+	seen := make(map[int64]struct{}, len(selected))
+	for _, rawID := range selected {
+		itemID, err := strconv.ParseInt(strings.TrimSpace(rawID), 10, 64)
+		if err != nil || itemID <= 0 {
+			return h.itemListActionError(w, r, production, actor, http.StatusBadRequest, "Choose valid costume items to copy.")
+		}
+		if _, ok := seen[itemID]; ok {
+			continue
+		}
+		seen[itemID] = struct{}{}
+		item, err := h.items.Get(r.Context(), productionID, itemID)
+		if err != nil {
+			return h.itemListActionError(w, r, production, actor, http.StatusNotFound, "One of the selected costume items could not be found.")
+		}
+		if item.ActorID != actorID || item.ArchivedAt != nil {
+			return h.itemListActionError(w, r, production, actor, http.StatusUnprocessableEntity, "Choose active costume items from this actor.")
+		}
+		copied = append(copied, copiedCostumeItem{ItemTypeID: item.ItemTypeID, Description: item.Description})
+	}
+	if err := setCopiedCostumeItemsCookie(w, copied); err != nil {
+		return h.itemListActionError(w, r, production, actor, http.StatusRequestEntityTooLarge, "The selected items are too large to copy at once.")
+	}
+	SetTrigger(w, "costume-item:copied")
+	return h.renderItemListAction(w, r, production, actor, "Copied "+strconv.Itoa(len(copied))+" costume item"+pluralSuffix(len(copied))+".", true)
+}
+
+// PasteCostumeItems creates new Find-status items in the requested actor from
+// the type and description snapshots stored in the browser cookie.
+func (h *CostumeItemHandler) PasteCostumeItems(w http.ResponseWriter, r *http.Request) error {
+	productionID, actorID, err := costumeItemScopeIDs(r)
+	if err != nil {
+		return err
+	}
+	if r.Method != http.MethodPost {
+		return costumeItemMethodError("costume item paste requires POST")
+	}
+	production, actor, err := h.scope(r.Context(), productionID, actorID)
+	if err != nil {
+		return err
+	}
+	copied, err := copiedCostumeItemsFromCookie(r)
+	if err != nil {
+		return h.itemListActionError(w, r, production, actor, http.StatusBadRequest, "The copied costume items are invalid. Copy the items again.")
+	}
+	if len(copied) == 0 {
+		return h.itemListActionError(w, r, production, actor, http.StatusUnprocessableEntity, "Copy at least one costume item before pasting.")
+	}
+	for _, item := range copied {
+		itemType, err := h.itemTypes.Get(r.Context(), productionID, item.ItemTypeID)
+		if err != nil || itemType.ArchivedAt != nil {
+			return h.itemListActionError(w, r, production, actor, http.StatusUnprocessableEntity, "One of the copied item types is no longer active in this production.")
+		}
+	}
+	for _, item := range copied {
+		if _, err := h.items.Create(r.Context(), storage.CreateCostumeItemInput{
+			ProductionID: productionID,
+			ActorID:      actorID,
+			ItemTypeID:   item.ItemTypeID,
+			Description:  item.Description,
+			Status:       storage.StatusFind,
+			Progress:     0,
+		}); err != nil {
+			return h.storageError("paste costume items", err)
+		}
+	}
+	SetTrigger(w, "costume-item:pasted")
+	return h.renderItemListAction(w, r, production, actor, "Pasted "+strconv.Itoa(len(copied))+" costume item"+pluralSuffix(len(copied))+".", true)
+}
+
+func (h *CostumeItemHandler) renderItemListAction(w http.ResponseWriter, r *http.Request, production storage.Production, actor storage.Actor, success string, hasCopiedItems bool) error {
+	items, err := h.items.List(r.Context(), storage.CostumeItemFilter{ProductionID: production.ID, ActorID: actor.ID})
+	if err != nil {
+		return h.storageError("list costume items", err)
+	}
+	model, err := h.listModel(r, production, actor, items)
+	if err != nil {
+		return err
+	}
+	model.Success = success
+	model.HasCopiedItems = hasCopiedItems
+	if IsHTMX(r) {
+		return RenderFragment(w, h.pages, "costume-items-list", http.StatusOK, model)
+	}
+	Redirect(w, r, costumeItemListPath(production.ID, actor.ID), http.StatusSeeOther)
+	return nil
+}
+
+func (h *CostumeItemHandler) itemListActionError(w http.ResponseWriter, r *http.Request, production storage.Production, actor storage.Actor, status int, message string) error {
+	if !IsHTMX(r) {
+		return &Error{Status: status, Message: message, Err: errors.New("web: costume item list action rejected")}
+	}
+	items, err := h.items.List(r.Context(), storage.CostumeItemFilter{ProductionID: production.ID, ActorID: actor.ID})
+	if err != nil {
+		return h.storageError("list costume items", err)
+	}
+	model, err := h.listModel(r, production, actor, items)
+	if err != nil {
+		return err
+	}
+	model.Error = message
+	return RenderFragment(w, h.pages, "costume-items-list", status, model)
 }
 
 // CreateCostumeItem validates and creates an item in the scoped actor.
@@ -214,7 +396,7 @@ func (h *CostumeItemHandler) CreateCostumeItem(w http.ResponseWriter, r *http.Re
 		if listErr != nil {
 			return h.storageError("list costume items", listErr)
 		}
-		model, err := h.listModel(r.Context(), production, actor, items)
+		model, err := h.listModel(r, production, actor, items)
 		if err != nil {
 			return err
 		}
@@ -297,7 +479,7 @@ func (h *CostumeItemHandler) UpdateCostumeItemStatus(w http.ResponseWriter, r *h
 		if err != nil {
 			return h.storageError("list costume items", err)
 		}
-		model, err := h.listModel(r.Context(), production, actor, items)
+		model, err := h.listModel(r, production, actor, items)
 		if err != nil {
 			return err
 		}
@@ -316,7 +498,7 @@ func (h *CostumeItemHandler) statusUpdateError(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return h.storageError("list costume items", err)
 	}
-	model, err := h.listModel(r.Context(), production, actor, items)
+	model, err := h.listModel(r, production, actor, items)
 	if err != nil {
 		return err
 	}
@@ -504,7 +686,7 @@ func (h *CostumeItemHandler) ArchiveCostumeItem(w http.ResponseWriter, r *http.R
 		if listErr != nil {
 			return h.storageError("list costume items", listErr)
 		}
-		model, err := h.listModel(r.Context(), production, actor, items)
+		model, err := h.listModel(r, production, actor, items)
 		if err != nil {
 			return err
 		}
@@ -683,8 +865,12 @@ func containsStatus(status string) bool {
 	return false
 }
 
-func (h *CostumeItemHandler) listModel(ctx context.Context, production storage.Production, actor storage.Actor, items []storage.CostumeItem) (CostumeItemPageModel, error) {
+func (h *CostumeItemHandler) listModel(r *http.Request, production storage.Production, actor storage.Actor, items []storage.CostumeItem) (CostumeItemPageModel, error) {
 	model := CostumeItemPageModel{Title: "Costume items · " + actor.Name, Production: production, Actor: actor, Form: CostumeItemFormView{Status: storage.StatusFind}, Statuses: costumeItemStatuses}
+	if copied, err := copiedCostumeItemsFromCookie(r); err == nil {
+		model.HasCopiedItems = len(copied) > 0
+	}
+	ctx := r.Context()
 	model.Actors, model.ItemTypes = h.selectors(ctx, production.ID)
 	for _, item := range items {
 		model.Items = append(model.Items, h.view(ctx, production.ID, item))

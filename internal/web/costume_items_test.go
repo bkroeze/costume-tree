@@ -184,6 +184,91 @@ func TestCostumeItemCreateAllocatesUniqueCodesAndAllowsDuplicates(t *testing.T) 
 	}
 }
 
+func TestCostumeItemCopyAndPasteUsesTypeAndDescriptionOnly(t *testing.T) {
+	h, production, actor, typ, ctx := costumeItemFixture(t)
+	otherActor, err := h.actors.Create(ctx, storage.CreateActorInput{ProductionID: production.ID, Name: "Bea"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := h.items.Create(ctx, storage.CreateCostumeItemInput{
+		ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: typ.ID,
+		Description: "Blue cloak", Status: storage.StatusComplete, Progress: 100,
+		NextAction: "Archive after opening", Blocker: "None", Notes: "Do not copy these fields",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := h.items.Create(ctx, storage.CreateCostumeItemInput{
+		ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: typ.ID,
+		Description: "Silver clasp", Status: storage.StatusFit, Progress: 50,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourcePath := costumeItemListPath(production.ID, actor.ID)
+
+	initial := httptest.NewRecorder()
+	if err := h.ListCostumeItems(initial, costumeItemRequest(http.MethodGet, sourcePath, nil)); err != nil {
+		t.Fatal(err)
+	}
+	initialBody := initial.Body.String()
+	if !strings.Contains(initialBody, `data-copy-items disabled`) || !strings.Contains(initialBody, `btn-brutal btn-cobalt btn-sm" type="submit" disabled`) {
+		t.Fatalf("copy and paste controls should start disabled: %s", initialBody)
+	}
+	if !strings.Contains(initialBody, `name="selected_items" value="`+strconv.FormatInt(first.ID, 10)+`"`) || !strings.Contains(initialBody, `name="selected_items" value="`+strconv.FormatInt(second.ID, 10)+`"`) {
+		t.Fatalf("item selection checkboxes missing: %s", initialBody)
+	}
+
+	copyRequest := costumeItemRequest(http.MethodPost, sourcePath+"/copy", url.Values{
+		"selected_items": {strconv.FormatInt(first.ID, 10), strconv.FormatInt(second.ID, 10)},
+	})
+	copyRequest.Header.Set("HX-Request", "true")
+	copied := httptest.NewRecorder()
+	if err := h.CopyCostumeItems(copied, copyRequest); err != nil {
+		t.Fatal(err)
+	}
+	if copied.Code != http.StatusOK || copied.Header().Get("HX-Trigger") != "costume-item:copied" || len(copied.Result().Cookies()) != 1 {
+		t.Fatalf("copy response = %d trigger=%q cookies=%v", copied.Code, copied.Header().Get("HX-Trigger"), copied.Result().Cookies())
+	}
+	copiedCookie := copied.Result().Cookies()[0]
+	if copiedCookie.Name != copiedCostumeItemsCookie || !copiedCookie.HttpOnly || copiedCookie.Path != "/" {
+		t.Fatalf("copied cookie = %#v", copiedCookie)
+	}
+	if !strings.Contains(copied.Body.String(), "Copied 2 costume items.") || !strings.Contains(copied.Body.String(), `btn-brutal btn-cobalt btn-sm" type="submit"><span aria-hidden="true">⎘</span> Paste`) {
+		t.Fatalf("copy response did not enable paste: %s", copied.Body.String())
+	}
+
+	pasteRequest := costumeItemRequest(http.MethodPost, costumeItemListPath(production.ID, otherActor.ID)+"/paste", nil)
+	pasteRequest.Header.Set("HX-Request", "true")
+	pasteRequest.AddCookie(copiedCookie)
+	pasted := httptest.NewRecorder()
+	if err := h.PasteCostumeItems(pasted, pasteRequest); err != nil {
+		t.Fatal(err)
+	}
+	if pasted.Code != http.StatusOK || pasted.Header().Get("HX-Trigger") != "costume-item:pasted" || !strings.Contains(pasted.Body.String(), "Pasted 2 costume items.") {
+		t.Fatalf("paste response = %d trigger=%q body=%s", pasted.Code, pasted.Header().Get("HX-Trigger"), pasted.Body.String())
+	}
+	created, err := h.items.List(ctx, storage.CostumeItemFilter{ProductionID: production.ID, ActorID: otherActor.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(created) != 2 {
+		t.Fatalf("pasted items = %#v", created)
+	}
+	for _, item := range created {
+		if item.ItemTypeID != typ.ID || item.Status != storage.StatusFind || item.Progress != 0 || item.NextAction != "" || item.Blocker != "" || item.Notes != "" {
+			t.Fatalf("pasted item copied fields beyond type and description: %#v", item)
+		}
+	}
+	descriptions := map[string]bool{}
+	for _, item := range created {
+		descriptions[item.Description] = true
+	}
+	if !descriptions["Blue cloak"] || !descriptions["Silver clasp"] {
+		t.Fatalf("pasted descriptions = %#v", descriptions)
+	}
+}
+
 func TestCostumeItemFormsUseNewStatusesAndDefaultToFind(t *testing.T) {
 	h, production, actor, typ, ctx := costumeItemFixture(t)
 	listPath := costumeItemListPath(production.ID, actor.ID)

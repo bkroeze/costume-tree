@@ -189,9 +189,6 @@ func (h *ActorHandler) CreateActor(w http.ResponseWriter, r *http.Request) error
 		return h.repositoryError("create actor", err)
 	}
 	SetTrigger(w, "actor:created")
-	if IsHTMX(r) {
-		return h.renderActorsFragment(w, r, production, ActorFormView{})
-	}
 	Redirect(w, r, productionActorsPath(production.ID), http.StatusSeeOther)
 	return nil
 }
@@ -242,9 +239,6 @@ func (h *ActorHandler) EditActor(w http.ResponseWriter, r *http.Request) error {
 		return h.repositoryError("update actor", err)
 	}
 	SetTrigger(w, "actor:updated")
-	if IsHTMX(r) {
-		return h.renderActorsFragment(w, r, production, ActorFormView{})
-	}
 	Redirect(w, r, productionActorsPath(production.ID), http.StatusSeeOther)
 	return nil
 }

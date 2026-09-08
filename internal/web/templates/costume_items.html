@@ -37,16 +37,26 @@
 {{- end}}
 
 {{define "costume-items-list" -}}
-<div class="costume-item-list" aria-label="Costume items" aria-live="polite" aria-atomic="false" aria-relevant="additions removals text">
+<div class="costume-item-list" data-costume-items aria-label="Costume items" aria-live="polite" aria-atomic="false" aria-relevant="additions removals text">
+  <div class="costume-items-toolbar" aria-label="Costume item actions">
+    <form id="costume-item-copy-form" action="/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items/copy" method="post" hx-post="/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items/copy" hx-target="#costume-items-list" hx-swap="innerHTML" hx-indicator="closest form" hx-disabled-elt="button[type='submit']">
+      <button class="btn-brutal btn-white btn-sm" id="costume-item-copy-button" type="submit" data-copy-items disabled><span aria-hidden="true">⧉</span> Copy</button>
+    </form>
+    <form action="/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items/paste" method="post" hx-post="/production/{{.Production.ID}}/actors/{{.Actor.ID}}/items/paste" hx-target="#costume-items-list" hx-swap="innerHTML" hx-indicator="closest form" hx-disabled-elt="button[type='submit']">
+      <button class="btn-brutal btn-cobalt btn-sm" type="submit"{{if not .HasCopiedItems}} disabled{{end}}><span aria-hidden="true">⎘</span> Paste</button>
+    </form>
+  </div>
   {{if .Error}}<p class="form-feedback form-feedback--error" role="alert">{{.Error}}</p>{{end}}
   {{if .Success}}<p class="form-feedback form-feedback--success" role="status">{{.Success}}</p>{{end}}
   {{if .Items}}
   <ul class="item-type-list__active">
     {{range .Items}}{{$item := .}}<li class="item-type-row" id="costume-item-{{$item.ID}}">
+      <label class="item-selection"><input type="checkbox" form="costume-item-copy-form" name="selected_items" value="{{$item.ID}}" data-copy-checkbox onchange="this.closest('[data-costume-items]').querySelector('[data-copy-items]').disabled = !this.closest('[data-costume-items]').querySelector('[data-copy-checkbox]:checked')"><span class="visually-hidden">Select {{$item.Code}} to copy</span></label>
       {{if $item.ThumbnailURL}}<a class="costume-item-list-thumbnail" href="/production/{{$.Production.ID}}/actors/{{$.Actor.ID}}/items/{{$item.ID}}" aria-label="View {{$item.Code}}"><img src="{{$item.ThumbnailURL}}" alt="Thumbnail of {{$item.Code}}" loading="lazy" width="96" height="96"></a>{{end}}
       <div class="item-type-row__info"><a class="costume-item-code" href="/production/{{$.Production.ID}}/actors/{{$.Actor.ID}}/items/{{$item.ID}}"><strong>{{$item.Code}}</strong></a><span class="item-type-name">{{$item.ItemType}}</span><p class="costume-item-desc">{{if $item.Description}}{{$item.Description}}{{else}}<span class="empty-state">No description</span>{{end}}</p></div>
-      <div class="item-type-row__meta"><form class="item-status-form" action="/production/{{$.Production.ID}}/actors/{{$.Actor.ID}}/items/{{$item.ID}}/status" method="post" hx-post="/production/{{$.Production.ID}}/actors/{{$.Actor.ID}}/items/{{$item.ID}}/status" hx-trigger="change" hx-target="#costume-items-list" hx-swap="innerHTML"><input type="hidden" name="updated_at" value="{{$item.UpdatedAt}}"><label class="visually-hidden" for="costume-item-status-{{$item.ID}}">Status for {{$item.Code}}</label><select class="select-brutal" id="costume-item-status-{{$item.ID}}" name="status">{{range $.Statuses}}<option value="{{.}}" {{if eq . $item.Status}}selected{{end}}>{{.}}</option>{{end}}</select><button class="visually-hidden" type="submit">Update status</button></form><span class="item-type-row__progress">{{$item.Progress}}%</span>{{if $item.Blocker}}<p class="item-type-row__blocker"><strong>Blocker:</strong> {{$item.Blocker}}</p>{{end}}</div>
+      <div class="item-type-row__meta"><form class="item-status-form" action="/production/{{$.Production.ID}}/actors/{{$.Actor.ID}}/items/{{$item.ID}}/status" method="post" hx-post="/production/{{$.Production.ID}}/actors/{{$.Actor.ID}}/items/{{$item.ID}}/status" hx-trigger="change" hx-target="#costume-items-list" hx-swap="innerHTML"><input type="hidden" name="updated_at" value="{{$item.UpdatedAt}}"><label class="visually-hidden" for="costume-item-status-{{$item.ID}}">Status for {{$item.Code}}</label><select class="select-brutal" id="costume-item-status-{{$item.ID}}" name="status">{{range $.Statuses}}<option value="{{.}}" {{if eq . $item.Status}}selected{{end}}>{{.}}</option>{{end}}</select><button class="visually-hidden" type="submit">Update status</button></form>
       <form action="/production/{{$.Production.ID}}/actors/{{$.Actor.ID}}/items/{{$item.ID}}/archive" method="post" hx-post="/production/{{$.Production.ID}}/actors/{{$.Actor.ID}}/items/{{$item.ID}}/archive" hx-target="#costume-items-list" hx-swap="innerHTML"><button class="btn-brutal btn-white btn-sm" type="submit" aria-label="Archive {{$item.Code}}">Archive</button></form>
+      <span class="item-type-row__progress">{{$item.Progress}}%</span>{{if $item.Blocker}}<p class="item-type-row__blocker"><strong>Blocker:</strong> {{$item.Blocker}}</p>{{end}}</div>
     </li>{{end}}
   </ul>
   {{else}}<p class="empty-state">No active costume items yet. Add the first physical piece above.</p>{{end}}

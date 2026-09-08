@@ -1261,6 +1261,32 @@ details > summary:focus-visible {
     max-width: 100%;
   }
 }
+.costume-items-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-bottom: 0.9rem;
+}
+
+.costume-items-toolbar form {
+  display: flex;
+}
+
+.item-selection {
+  display: grid;
+  width: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+}
+
+.item-selection input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--cobalt);
+}
+
 .item-type-list__active {
   display: grid;
   gap: 0.8rem;

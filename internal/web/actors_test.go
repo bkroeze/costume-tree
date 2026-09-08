@@ -83,6 +83,86 @@ func TestProductionBootstrapAndActorLifecycle(t *testing.T) {
 	}
 }
 
+func TestActorAddEditAddResetsSharedForm(t *testing.T) {
+	handler, db := actorHandlerFixture(t)
+	ctx := context.Background()
+	production, err := storage.NewProductionRepository(db).Create(ctx, storage.CreateProductionInput{Name: "Hamlet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	create := actorFormRequest(http.MethodPost, ActorsPath, url.Values{"name": {"Banquo"}, "role": {"Thane"}})
+	create.Header.Set("HX-Request", "true")
+	created := httptest.NewRecorder()
+	if err := handler.CreateActor(created, create); err != nil {
+		t.Fatal(err)
+	}
+	if created.Code != http.StatusNoContent || created.Header().Get("HX-Redirect") != "/production/1/actors" || created.Header().Get("HX-Trigger") != "actor:created" {
+		t.Fatalf("HTMX create = %d redirect=%q trigger=%q", created.Code, created.Header().Get("HX-Redirect"), created.Header().Get("HX-Trigger"))
+	}
+
+	assertActorFormIsReset(t, handler, production.ID)
+	actors, err := storage.NewActorRepository(db).List(ctx, production.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(actors) != 1 {
+		t.Fatalf("actors after create = %#v", actors)
+	}
+
+	edit := actorFormRequest(http.MethodPost, ActorsPath+"/"+strconvFormat(actors[0].ID), url.Values{"name": {"Banquo updated"}, "role": {"Lead"}})
+	edit.SetPathValue("id", strconvFormat(actors[0].ID))
+	edit.Header.Set("HX-Request", "true")
+	updated := httptest.NewRecorder()
+	if err := handler.EditActor(updated, edit); err != nil {
+		t.Fatal(err)
+	}
+	if updated.Code != http.StatusNoContent || updated.Header().Get("HX-Redirect") != "/production/1/actors" || updated.Header().Get("HX-Trigger") != "actor:updated" {
+		t.Fatalf("HTMX edit = %d redirect=%q trigger=%q", updated.Code, updated.Header().Get("HX-Redirect"), updated.Header().Get("HX-Trigger"))
+	}
+
+	assertActorFormIsReset(t, handler, production.ID)
+
+	addSecond := actorFormRequest(http.MethodPost, ActorsPath, url.Values{"name": {"Ophelia"}})
+	addSecond.Header.Set("HX-Request", "true")
+	added := httptest.NewRecorder()
+	if err := handler.CreateActor(added, addSecond); err != nil {
+		t.Fatal(err)
+	}
+	if added.Code != http.StatusNoContent || added.Header().Get("HX-Redirect") != "/production/1/actors" {
+		t.Fatalf("HTMX second create = %d redirect=%q", added.Code, added.Header().Get("HX-Redirect"))
+	}
+
+	list := httptest.NewRecorder()
+	if err := handler.ListActors(list, httptest.NewRequest(http.MethodGet, ActorsPath, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(list.Body.String(), "Banquo updated") || !strings.Contains(list.Body.String(), "Ophelia") {
+		t.Fatalf("actor list after add-edit-add = %s", list.Body.String())
+	}
+	assertActorFormMarkupReset(t, list.Body.String(), production.ID)
+}
+
+func assertActorFormIsReset(t *testing.T, handler *ActorHandler, productionID int64) {
+	t.Helper()
+	list := httptest.NewRecorder()
+	if err := handler.ListActors(list, httptest.NewRequest(http.MethodGet, productionActorsPath(productionID), nil)); err != nil {
+		t.Fatal(err)
+	}
+	assertActorFormMarkupReset(t, list.Body.String(), productionID)
+}
+
+func assertActorFormMarkupReset(t *testing.T, body string, productionID int64) {
+	t.Helper()
+	action := `/production/` + strconvFormat(productionID) + `/actors`
+	if !strings.Contains(body, `action="`+action+`"`) || !strings.Contains(body, `hx-post="`+action+`"`) || !strings.Contains(body, ">Add actor</button>") {
+		t.Fatalf("actor form was not reset: %s", body)
+	}
+	if strings.Contains(body, ">Save actor</button>") {
+		t.Fatalf("actor form still targets edit mode: %s", body)
+	}
+}
+
 func TestActorHTMXValidationAndArchive(t *testing.T) {
 	handler, db := actorHandlerFixture(t)
 	ctx := context.Background()
