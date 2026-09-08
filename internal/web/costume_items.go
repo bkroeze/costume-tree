@@ -657,14 +657,24 @@ func (h *CostumeItemHandler) EditCostumeItem(w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
+// DeleteCostumeItem removes an item from active inventory while preserving its
+// history and immutable code. Its detail view remains accessible.
+func (h *CostumeItemHandler) DeleteCostumeItem(w http.ResponseWriter, r *http.Request) error {
+	return h.removeCostumeItem(w, r, "delete", "costume-item:deleted", "deleted")
+}
+
 // ArchiveCostumeItem archives an item. Its detail view remains accessible.
 func (h *CostumeItemHandler) ArchiveCostumeItem(w http.ResponseWriter, r *http.Request) error {
+	return h.removeCostumeItem(w, r, "archive", "costume-item:archived", "archived")
+}
+
+func (h *CostumeItemHandler) removeCostumeItem(w http.ResponseWriter, r *http.Request, operation, trigger, successVerb string) error {
 	productionID, actorID, itemID, err := costumeItemIDs(r)
 	if err != nil {
 		return err
 	}
 	if r.Method != http.MethodPost {
-		return costumeItemMethodError("costume item archive requires POST")
+		return costumeItemMethodError("costume item " + operation + " requires POST")
 	}
 	production, actor, err := h.scope(r.Context(), productionID, actorID)
 	if err != nil {
@@ -678,9 +688,9 @@ func (h *CostumeItemHandler) ArchiveCostumeItem(w http.ResponseWriter, r *http.R
 		return costumeItemNotFound()
 	}
 	if err := h.items.Archive(r.Context(), productionID, itemID); err != nil {
-		return h.storageError("archive costume item", err)
+		return h.storageError(operation+" costume item", err)
 	}
-	SetTrigger(w, "costume-item:archived")
+	SetTrigger(w, trigger)
 	if IsHTMX(r) {
 		items, listErr := h.items.List(r.Context(), storage.CostumeItemFilter{ProductionID: productionID, ActorID: actorID})
 		if listErr != nil {
@@ -690,7 +700,7 @@ func (h *CostumeItemHandler) ArchiveCostumeItem(w http.ResponseWriter, r *http.R
 		if err != nil {
 			return err
 		}
-		model.Success = item.Code + " archived."
+		model.Success = item.Code + " " + successVerb + "."
 		return RenderFragment(w, h.pages, "costume-items-list", http.StatusOK, model)
 	}
 	Redirect(w, r, costumeItemListPath(productionID, actorID), http.StatusSeeOther)
@@ -781,6 +791,9 @@ func (h *CostumeItemHandler) LookupCode(w http.ResponseWriter, r *http.Request) 
 }
 func (h *CostumeItemHandler) LookupCostumeItemByCode(w http.ResponseWriter, r *http.Request) error {
 	return h.LookupCostumeItem(w, r)
+}
+func (h *CostumeItemHandler) DeleteItem(w http.ResponseWriter, r *http.Request) error {
+	return h.DeleteCostumeItem(w, r)
 }
 
 func (h *CostumeItemHandler) scope(ctx context.Context, productionID, actorID int64) (storage.Production, storage.Actor, error) {

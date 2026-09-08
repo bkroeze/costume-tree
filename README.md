@@ -109,6 +109,10 @@ Add or edit a costume item to attach a JPEG, PNG, or GIF photo up to 20 MiB, 60 
 
 Photo files are separate from the SQLite backup. Back up both the database volume and `COSTUMETREE_DIR` to preserve complete records.
 
+## Removing costume items
+
+The actor item-management page provides a confirmed **Delete** action. Delete removes the piece from active inventory by archiving it; the immutable code and detail history remain available for production records.
+
 ## Backup and cold restore
 
 Backups use SQLite `VACUUM INTO`, so a live WAL database is not copied naively. Run the backup command as the application user while the container is serving:

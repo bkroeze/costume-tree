@@ -133,6 +133,7 @@ func New(logger *slog.Logger, dependencies Dependencies) (http.Handler, error) {
 		mux.Handle("GET /production/{production}/actors/{actor}/items/{item}/edit", server.handle("costume-item-edit", costumeItemHandler.EditCostumeItem))
 		mux.Handle("POST /production/{production}/actors/{actor}/items/{item}/edit", server.handle("costume-item-update", costumeItemHandler.EditCostumeItem))
 		mux.Handle("POST /production/{production}/actors/{actor}/items/{item}/archive", server.handle("costume-item-archive", costumeItemHandler.ArchiveCostumeItem))
+		mux.Handle("POST /production/{production}/actors/{actor}/items/{item}/delete", server.handle("costume-item-delete", costumeItemHandler.DeleteCostumeItem))
 		mux.Handle("GET /production/{production}/actors/{actor}/items/{item}/photos", server.handle("costume-item-photo-gallery", costumeItemHandler.CostumeItemPhotoGallery))
 		mux.Handle("GET /production/{production}/actors/{actor}/items/{item}/photos/{photo}/{variant}", server.handle("costume-item-photo", costumeItemHandler.ServeCostumeItemPhoto))
 	} else {

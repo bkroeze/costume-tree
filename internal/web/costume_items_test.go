@@ -318,7 +318,7 @@ func TestCostumeItemCopyAndPasteUsesTypeAndDescriptionOnly(t *testing.T) {
 	}
 }
 
-func TestCostumeItemCreateRoutePersistsAddForm(t *testing.T) {
+func TestCostumeItemCreateAndDeleteRoutesPersistChanges(t *testing.T) {
 	db, err := storage.Open(filepath.Join(t.TempDir(), "costume-items-route.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -366,6 +366,19 @@ func TestCostumeItemCreateRoutePersistsAddForm(t *testing.T) {
 	}
 	if len(created) != 1 || created[0].ItemTypeID != itemType.ID || created[0].Description != "Blue cloak" {
 		t.Fatalf("created items = %#v", created)
+	}
+	deleteRequest := costumeItemRequest(http.MethodPost, costumeItemDetailPath(production.ID, actor.ID, created[0].ID)+"/delete", nil)
+	deleteResponse := httptest.NewRecorder()
+	handler.ServeHTTP(deleteResponse, deleteRequest)
+	if deleteResponse.Code != http.StatusSeeOther || deleteResponse.Header().Get("Location") != path {
+		t.Fatalf("delete item route = %d location=%q", deleteResponse.Code, deleteResponse.Header().Get("Location"))
+	}
+	active, err := items.List(ctx, storage.CostumeItemFilter{ProductionID: production.ID, ActorID: actor.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(active) != 0 {
+		t.Fatalf("active items after route delete = %#v", active)
 	}
 }
 
@@ -604,6 +617,51 @@ func TestCostumeItemEditRejectsStaleTimestampAndArchiveHidesFromList(t *testing.
 	}
 	if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), item.Code) || !strings.Contains(detail.Body.String(), "Archived") {
 		t.Fatalf("archived detail = %d/%s", detail.Code, detail.Body.String())
+	}
+}
+
+func TestCostumeItemDeleteRemovesActiveItemWithConfirmation(t *testing.T) {
+	h, production, actor, typ, ctx := costumeItemFixture(t)
+	item, err := h.items.Create(ctx, storage.CreateCostumeItemInput{
+		ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: typ.ID, Description: "Delete me",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listPath := costumeItemListPath(production.ID, actor.ID)
+	list := httptest.NewRecorder()
+	if err := h.ListCostumeItems(list, costumeItemRequest(http.MethodGet, listPath, nil)); err != nil {
+		t.Fatal(err)
+	}
+	body := list.Body.String()
+	if !strings.Contains(body, `action="`+costumeItemDetailPath(production.ID, actor.ID, item.ID)+`/delete"`) ||
+		!strings.Contains(body, `onsubmit="return confirm('Delete `+item.Code+` from active inventory?')"`) {
+		t.Fatalf("delete control lacks scoped action or confirmation: %s", body)
+	}
+
+	deleted := httptest.NewRecorder()
+	if err := h.DeleteCostumeItem(deleted, costumeItemRequest(http.MethodPost, costumeItemDetailPath(production.ID, actor.ID, item.ID)+"/delete", nil)); err != nil {
+		t.Fatal(err)
+	}
+	if deleted.Code != http.StatusSeeOther || deleted.Header().Get("Location") != listPath {
+		t.Fatalf("delete response = %d location=%q", deleted.Code, deleted.Header().Get("Location"))
+	}
+	if deleted.Header().Get("HX-Trigger") != "costume-item:deleted" {
+		t.Fatalf("delete trigger = %q", deleted.Header().Get("HX-Trigger"))
+	}
+	stored, err := h.items.Get(ctx, production.ID, item.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.ArchivedAt == nil {
+		t.Fatalf("deleted item = %#v, want preserved archived record", stored)
+	}
+	active, err := h.items.List(ctx, storage.CostumeItemFilter{ProductionID: production.ID, ActorID: actor.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(active) != 0 {
+		t.Fatalf("active items after delete = %#v", active)
 	}
 }
 
