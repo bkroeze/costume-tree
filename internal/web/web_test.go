@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -36,8 +37,12 @@ func TestHandlerServesHomeAndEmbeddedAsset(t *testing.T) {
 		if contentType := response.Header().Get("Content-Type"); contentType != "text/html; charset=utf-8" {
 			t.Errorf("Content-Type = %q", contentType)
 		}
-		if body := response.Body.String(); !strings.Contains(body, `href="/assets/app.css`) {
+		body := response.Body.String()
+		if !strings.Contains(body, `href="/assets/app.css`) {
 			t.Errorf("body does not reference embedded stylesheet: %s", body)
+		}
+		if !strings.Contains(body, `rel="manifest" href="/assets/site.webmanifest"`) {
+			t.Errorf("body does not reference web app manifest: %s", body)
 		}
 	})
 
@@ -54,6 +59,45 @@ func TestHandlerServesHomeAndEmbeddedAsset(t *testing.T) {
 		}
 		if body := response.Body.String(); !strings.Contains(body, "--cobalt: #2563eb") {
 			t.Errorf("unexpected stylesheet body: %s", body)
+		}
+	})
+
+	t.Run("manifest declares installable app", func(t *testing.T) {
+		request := httptest.NewRequest(http.MethodGet, "/assets/site.webmanifest", nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+
+		if response.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+		}
+		if contentType := response.Header().Get("Content-Type"); contentType != "application/manifest+json" {
+			t.Errorf("Content-Type = %q", contentType)
+		}
+
+		var manifest struct {
+			ID       string `json:"id"`
+			StartURL string `json:"start_url"`
+			Scope    string `json:"scope"`
+			Display  string `json:"display"`
+			Icons    []struct {
+				Sizes string `json:"sizes"`
+			} `json:"icons"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&manifest); err != nil {
+			t.Fatalf("decode manifest: %v", err)
+		}
+		if manifest.ID != "/" || manifest.StartURL != "/" || manifest.Scope != "/" {
+			t.Errorf("navigation identity = id %q, start_url %q, scope %q; want root", manifest.ID, manifest.StartURL, manifest.Scope)
+		}
+		if manifest.Display != "standalone" {
+			t.Errorf("display = %q, want standalone", manifest.Display)
+		}
+		iconSizes := make(map[string]bool, len(manifest.Icons))
+		for _, icon := range manifest.Icons {
+			iconSizes[icon.Sizes] = true
+		}
+		if !iconSizes["192x192"] || !iconSizes["512x512"] {
+			t.Errorf("icon sizes = %v, want 192x192 and 512x512", iconSizes)
 		}
 	})
 }

@@ -2,6 +2,9 @@
   "name": "Costume Tree",
   "short_name": "CostumeTree",
   "description": "Wardrobe operations and costume tracking workspace",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
   "icons": [
     {
       "src": "/assets/android-chrome-192x192.png",

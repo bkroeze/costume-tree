@@ -1,0 +1,76 @@
+{{define "reports-page" -}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Filtered costume report">
+  <title>{{.Title}}</title>
+  <link rel="icon" href="/assets/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+  <link rel="manifest" href="/assets/site.webmanifest">
+  <meta name="theme-color" content="#fde047">
+  <link rel="stylesheet" href="/assets/app.css?v=3">
+</head>
+<body>
+  <header class="site-header"><div class="site-header__inner">
+    <a class="brand" href="/" aria-label="Costume Tree home"><span class="brand-mark" aria-hidden="true"><img src="/assets/favicon-dark-32x32.png" alt="" width="32" height="32"></span><span class="brand-copy"><span>Costume Tree</span><small>Wardrobe operations</small></span></a>
+    <div class="header-actions"><a class="badge" href="/production/{{.Production.ID}}/dashboard">{{.Production.Name}}</a><a class="btn-brutal btn-white btn-sm" href="/production/{{.Production.ID}}/dashboard">Dashboard</a></div>
+  </div></header>
+  <main class="page-shell" id="reports-page">
+    <section class="page-intro" aria-labelledby="reports-title"><div><nav class="eyebrow" aria-label="Breadcrumb"><a href="/production/{{.Production.ID}}/dashboard">Production</a><span aria-hidden="true"> / </span><a href="/production/{{.Production.ID}}/reports">reports</a></nav><h1 id="reports-title">Filtered reports.</h1><p class="page-intro__copy">Make a copy-ready inventory summary for a status in {{.Production.Name}}.</p></div></section>
+    <section class="toolbar-box" aria-labelledby="report-filters-title">
+      <div class="toolbar-copy"><h2 id="report-filters-title">Report filter</h2><p>Choose a workflow status, then make a report to preview it.</p></div>
+      <form class="filter-controls" action="/production/{{.Production.ID}}/reports" method="get">
+        <label class="field-inline"><span class="field-label">Status</span><select class="select-brutal" name="status"><option value="all" {{if eq .Status "all"}}selected{{end}}>All statuses</option>{{range .Statuses}}<option value="{{.}}" {{if eq $.Status .}}selected{{end}}>{{.}}</option>{{end}}</select></label>
+        <input type="hidden" name="report" value="1">
+        <button class="btn-brutal btn-cobalt" type="submit">Make report</button>
+      </form>
+    </section>
+    {{if .HasReport}}
+    <dialog class="report-modal" open aria-labelledby="report-modal-title">
+      <div class="report-modal__card">
+        <div class="report-modal__header"><div><p class="section-kicker">Copy-ready report</p><h2 id="report-modal-title">{{.Production.Name}} · {{if eq .Status "all"}}All statuses{{else}}{{.Status}}{{end}}</h2></div><button class="btn-brutal btn-white btn-sm" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+        <div id="report-document" class="report-document">
+          <h3>{{.Production.Name}} costume report</h3>
+          <p>Status: <strong>{{if eq .Status "all"}}All statuses{{else}}{{.Status}}{{end}}</strong></p>
+          <table class="report-table"><caption>Item count by category</caption><thead><tr><th scope="col">Category</th><th scope="col">Count</th></tr></thead><tbody>{{range .Report.Categories}}<tr><th scope="row">{{.ItemTypeName}}</th><td>{{.Count}}</td></tr>{{else}}<tr><td colspan="2">No matching items.</td></tr>{{end}}</tbody></table>
+          {{if .Report.Accessories}}<h4>Accessories</h4><ul class="report-accessories">{{range .Report.Accessories}}<li><strong>{{.Code}}</strong> — {{if .Description}}{{.Description}}{{else}}No description{{end}} — {{.ActorName}}</li>{{end}}</ul>{{end}}
+        </div>
+        <div class="report-modal__actions"><button class="btn-brutal btn-cobalt" type="button" onclick="copyReport(this)">Copy to clipboard</button><p id="report-copy-status" role="status" aria-live="polite"></p></div>
+      </div>
+    </dialog>
+    {{end}}
+  </main>
+  <footer class="site-footer">Costume Tree / backstage clarity, one piece at a time.</footer>
+  {{if .HasReport}}<script>
+    async function copyReport(button) {
+      const report = document.getElementById('report-document');
+      const status = document.getElementById('report-copy-status');
+      try {
+        const html = report.outerHTML;
+        const plain = report.innerText;
+        if (navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'text/html': new Blob([html], {type: 'text/html'}),
+              'text/plain': new Blob([plain], {type: 'text/plain'})
+            })
+          ]);
+        } else if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(plain);
+        } else {
+          throw new Error('Clipboard unavailable');
+        }
+        status.textContent = 'Report copied.';
+        button.focus();
+      } catch (_) {
+        status.textContent = 'Copy failed. Select the report text and copy it manually.';
+      }
+    }
+  </script>{{end}}
+</body>
+</html>
+{{- end}}

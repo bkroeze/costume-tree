@@ -900,6 +900,110 @@ a.badge {
   padding: 0.5rem 0.75rem;
 }
 
+.report-modal {
+  width: min(100% - 2rem, 900px);
+  max-height: calc(100% - 2rem);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  padding: 0;
+  background: var(--surface);
+  box-shadow: var(--shadow-large);
+  color: var(--ink);
+}
+
+.report-modal::backdrop {
+  background: rgb(18 33 58 / 72%);
+}
+
+.report-modal__card {
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  padding: 1.25rem;
+}
+
+.report-modal__header,
+.report-modal__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.report-modal__header {
+  margin-bottom: 1.25rem;
+  border-bottom: 2px dashed #bbc4d0;
+  padding-bottom: 1rem;
+}
+
+.report-modal__actions {
+  margin-top: 1.25rem;
+  border-top: 2px dashed #bbc4d0;
+  padding-top: 1rem;
+}
+
+.report-modal__actions p {
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.report-document {
+  display: grid;
+  gap: 0.8rem;
+  color: #111827;
+  font-family: Arial, sans-serif;
+}
+
+.report-document h3,
+.report-document h4 {
+  margin: 0;
+  color: #111827;
+}
+
+.report-document p {
+  margin: 0;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.4rem;
+}
+
+.report-table caption {
+  margin-bottom: 0.45rem;
+  color: #526176;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.report-table th,
+.report-table td {
+  border: 1px solid #9ca3af;
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+}
+
+.report-table th {
+  background: #e5e7eb;
+}
+
+.report-table td:last-child {
+  text-align: right;
+}
+
+.report-accessories {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.report-accessories li {
+  padding-left: 0.2rem;
+}
+
 .form-card {
   padding: 1.25rem;
   background: var(--surface);

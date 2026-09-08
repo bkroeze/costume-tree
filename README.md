@@ -29,6 +29,8 @@ just docker-push
 just compose-start
 ```
 
+The production dashboard links to **Reports**, where a status-filtered category count can be previewed in a modal and copied as rich text for email.
+
 `just docker-push` builds and pushes `ghcr.io/bkroeze/costume-tree:<git-short-sha>` by default, then prints the full image reference. Configure the package visibility separately in GitHub's package settings:
 
 ```sh

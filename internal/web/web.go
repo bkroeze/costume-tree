@@ -90,6 +90,7 @@ func New(logger *slog.Logger, dependencies Dependencies) (http.Handler, error) {
 		dashboardHandler := NewDashboardHandler(productions, actors, itemTypes, costumeItems, storage.NewDashboardQueries(database), pages)
 		searchHandler := NewItemSearchHandler(productions, storage.NewItemSearchRepository(database), pages)
 		summaryHandler := NewItemTypeSummaryHandler(productions, storage.NewItemTypeSummaryRepository(database), pages)
+		reportsHandler := NewReportsHandler(productions, storage.NewReportRepository(database), pages)
 		bulkHandler := NewBulkImportHandler(productions, storage.NewBulkImporter(database), pages)
 		landingHandler := NewLandingHandler(storage.NewProductionDirectoryQueries(database), pages)
 		server.landing = landingHandler
@@ -119,6 +120,7 @@ func New(logger *slog.Logger, dependencies Dependencies) (http.Handler, error) {
 		mux.Handle("GET /production/{production}/workspace/{actor}", server.handle("workspace", dashboardHandler.Workspace))
 		mux.Handle("POST /production/{production}/workspace/{actor}", server.handle("workspace", dashboardHandler.Workspace))
 		mux.Handle("GET /production/{production}/summary", server.handle("summary", summaryHandler.Summary))
+		mux.Handle("GET /production/{production}/reports", server.handle("reports", reportsHandler.Reports))
 		mux.Handle("GET /production/{production}/items", server.handle("item-search", searchHandler.SearchItems))
 		mux.Handle("GET /production/{production}/items/code/{code}", server.handle("costume-item-code", costumeItemHandler.LookupCostumeItem))
 		mux.Handle("GET /production/{production}/bulk", server.handle("bulk-import", bulkHandler.BulkImport))
@@ -237,6 +239,9 @@ func (s *server) handle(name string, next handlerFunc) http.HandlerFunc {
 func cacheAssets(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
+		if strings.HasSuffix(r.URL.Path, ".webmanifest") {
+			w.Header().Set("Content-Type", "application/manifest+json")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

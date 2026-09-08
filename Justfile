@@ -91,6 +91,11 @@ health:
 shell:
     docker exec --interactive --tty {{container}} /bin/sh
 
+# Open the current database in SQLite, optionally executing a SQL file.
+sqlite sql_file="":
+    docker run --rm --interactive --tty --volume {{volume}}:/data --volume "$(pwd):/workspace:ro" alpine:3.22.1 sh -c 'apk add --no-cache sqlite su-exec >/dev/null && owner="$(stat -c "%u:%g" /data/costume-tree.db 2>/dev/null || stat -c "%u:%g" /data)" && if [ -n "$1" ]; then exec su-exec "$owner" sqlite3 /data/costume-tree.db < "/workspace/$1"; else exec su-exec "$owner" sqlite3 /data/costume-tree.db; fi' -- '{{sql_file}}'
+
+
 # Create a validated backup in backups/NAME and leave the volume untouched.
 backup name="costume-tree-backup.db":
     @mkdir -p backups
