@@ -172,6 +172,12 @@ h3 {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.eyebrow a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.18em;
+}
 
 .brand-copy small {
   font-size: 0.62rem;

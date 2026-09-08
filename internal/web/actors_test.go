@@ -46,6 +46,9 @@ func TestProductionBootstrapAndActorLifecycle(t *testing.T) {
 	if first.Code != http.StatusOK || !strings.Contains(first.Body.String(), "Name your production") {
 		t.Fatalf("first-run response = %d %s", first.Code, first.Body.String())
 	}
+	if !strings.Contains(first.Body.String(), `<nav class="eyebrow" aria-label="Breadcrumb"><a href="/production">Workspace</a><span aria-hidden="true"> / </span><a href="/production">first run</a></nav>`) {
+		t.Fatalf("first-run breadcrumb links missing: %s", first.Body.String())
+	}
 
 	created := httptest.NewRecorder()
 	if err := handler.CreateProduction(created, actorFormRequest(http.MethodPost, ProductionPath, url.Values{"name": {"  Hamlet  "}})); err != nil {
@@ -80,6 +83,9 @@ func TestProductionBootstrapAndActorLifecycle(t *testing.T) {
 	}
 	if !strings.Contains(list.Body.String(), `href="/production/1/actors/1">Edit</a>`) {
 		t.Fatalf("actor edit link missing or incorrect: %s", list.Body.String())
+	}
+	if !strings.Contains(list.Body.String(), `<nav class="eyebrow" aria-label="Breadcrumb"><a href="/production/1/dashboard">Workspace</a><span aria-hidden="true"> / </span><a href="/production/1/actors">cast</a></nav>`) {
+		t.Fatalf("actor breadcrumb links missing: %s", list.Body.String())
 	}
 }
 

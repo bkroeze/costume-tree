@@ -55,6 +55,9 @@ func TestItemTypeSummaryRendersCanonicalFilterLinksAndHTMXMutation(t *testing.T)
 	if !strings.Contains(body, `<a class="badge" href="/production/`+strconv.FormatInt(production.ID, 10)+`/dashboard">Macbeth</a>`) {
 		t.Fatalf("production badge does not link to dashboard: %s", body)
 	}
+	if !strings.Contains(body, `<nav class="eyebrow" aria-label="Breadcrumb"><a href="/production/`+strconv.FormatInt(production.ID, 10)+`/dashboard">Production</a><span aria-hidden="true"> / </span><a href="/production/`+strconv.FormatInt(production.ID, 10)+`/summary">overview</a></nav>`) {
+		t.Fatalf("summary breadcrumb links missing: %s", body)
+	}
 	if !strings.Contains(body, `href="/production/`+strconv.FormatInt(production.ID, 10)+`/items?item_type_id=`+strconv.FormatInt(cloak.ID, 10)+`&amp;status=Fit"`) {
 		t.Fatalf("missing canonical fit link: %s", body)
 	}

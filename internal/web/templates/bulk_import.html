@@ -22,7 +22,7 @@
   </div></header>
   <main class="page-shell" id="bulk-import-page">
     <section class="page-intro" aria-labelledby="bulk-import-title">
-      <div><p class="eyebrow">Production / intake</p><h1 id="bulk-import-title">Bulk import</h1><p class="page-intro__copy">Paste an actor followed by one or more item types. Blank lines start the next actor.</p></div>
+      <div><nav class="eyebrow" aria-label="Breadcrumb"><a href="/production/{{.Production.ID}}/dashboard">Production</a><span aria-hidden="true"> / </span><a href="/production/{{.Production.ID}}/bulk">intake</a></nav><h1 id="bulk-import-title">Bulk import</h1><p class="page-intro__copy">Paste an actor followed by one or more item types. Blank lines start the next actor.</p></div>
     </section>
     {{if .Results}}{{template "bulk-import-result" .}}{{else}}{{template "bulk-import-preview" .}}{{end}}
   </main>

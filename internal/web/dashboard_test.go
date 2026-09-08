@@ -92,6 +92,12 @@ func TestDashboardAndWorkspaceRenderActiveData(t *testing.T) {
 	if !strings.Contains(body, `<a class="badge" href="/production/`+strconv.FormatInt(production.ID, 10)+`/dashboard">Macbeth</a>`) {
 		t.Fatalf("production badge does not link to dashboard: %s", body)
 	}
+	if !strings.Contains(body, `href="/production/`+strconv.FormatInt(production.ID, 10)+`/dashboard">Refresh</a>`) {
+		t.Fatalf("dashboard refresh link missing: %s", body)
+	}
+	if !strings.Contains(body, `<nav class="eyebrow" aria-label="Breadcrumb"><a href="/production/`+strconv.FormatInt(production.ID, 10)+`/dashboard">Production</a><span aria-hidden="true"> / </span><a href="/production/`+strconv.FormatInt(production.ID, 10)+`/dashboard">dashboard</a></nav>`) {
+		t.Fatalf("dashboard breadcrumb links missing: %s", body)
+	}
 	for _, want := range []string{
 		`href="/production/` + strconv.FormatInt(production.ID, 10) + `/summary"`,
 		`href="/production/` + strconv.FormatInt(production.ID, 10) + `/items"`,
@@ -134,6 +140,12 @@ func TestDashboardAndWorkspaceRenderActiveData(t *testing.T) {
 	}
 	if workspace.Code != http.StatusOK || !strings.Contains(workspaceBody, "C-0001") || !strings.Contains(workspaceBody, "25") || !strings.Contains(workspaceBody, "Waiting for fabric") || !strings.Contains(workspaceBody, "Cloak:") || !strings.Contains(workspaceBody, `name="description"`) || !strings.Contains(workspaceBody, `placeholder="No description"`) || strings.Contains(workspaceBody, `<span class="status-brutal status-example">Make</span>`) {
 		t.Fatalf("workspace response = %d %s", workspace.Code, workspaceBody)
+	}
+	if !strings.Contains(workspaceBody, `<nav class="eyebrow" aria-label="Breadcrumb"><a href="/production/`+strconv.FormatInt(production.ID, 10)+`/dashboard">Production</a><span aria-hidden="true"> / </span><a href="/production/`+strconv.FormatInt(production.ID, 10)+`/workspace/`+strconv.FormatInt(actor.ID, 10)+`">actor workspace</a></nav>`) {
+		t.Fatalf("workspace breadcrumb links missing: %s", workspaceBody)
+	}
+	if !strings.Contains(workspaceBody, `href="/production/`+strconv.FormatInt(production.ID, 10)+`/workspace/`+strconv.FormatInt(actor.ID, 10)+`">Refresh</a>`) {
+		t.Fatalf("workspace refresh link missing: %s", workspaceBody)
 	}
 	assertWorkflowStatusOptions(t, workspaceBody)
 }

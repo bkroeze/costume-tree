@@ -54,6 +54,9 @@ func TestItemSearchHandlerRendersCanonicalFiltersAndHTMXResults(t *testing.T) {
 	if full.Code != http.StatusOK || !strings.Contains(full.Body.String(), "Blue velvet") || !strings.Contains(full.Body.String(), "code=C-0001") || !strings.Contains(full.Body.String(), "Waiting for trim") {
 		t.Fatalf("full response status=%d body-len=%d body=%q", full.Code, len(full.Body.String()), full.Body.String())
 	}
+	if !strings.Contains(full.Body.String(), `<nav class="eyebrow" aria-label="Breadcrumb"><a href="/production/`+formatID(production.ID)+`/dashboard">Production</a><span aria-hidden="true"> / </span><a href="/production/`+formatID(production.ID)+`/items">inventory</a></nav>`) {
+		t.Fatalf("item search breadcrumb links missing: %s", full.Body.String())
+	}
 	for _, status := range []string{"Find", "Make", "Fit", "Alterations", "Complete"} {
 		option := `<option value="` + status + `"`
 		if strings.Count(full.Body.String(), option) != 1 {

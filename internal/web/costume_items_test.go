@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -184,6 +185,54 @@ func TestCostumeItemCreateAllocatesUniqueCodesAndAllowsDuplicates(t *testing.T) 
 	}
 }
 
+func TestCostumeItemPagesLinkBackThroughBreadcrumbsAndActor(t *testing.T) {
+	h, production, actor, typ, ctx := costumeItemFixture(t)
+	item, err := h.items.Create(ctx, storage.CreateCostumeItemInput{
+		ProductionID: production.ID, ActorID: actor.ID, ItemTypeID: typ.ID, Description: "Blue cloak",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	productionPath := "/production/" + strconv.FormatInt(production.ID, 10)
+	actorPath := productionPath + "/actors/" + strconv.FormatInt(actor.ID, 10)
+	list := httptest.NewRecorder()
+	if err := h.ListCostumeItems(list, costumeItemRequest(http.MethodGet, actorPath+"/items", nil)); err != nil {
+		t.Fatal(err)
+	}
+	listBody := list.Body.String()
+	for _, want := range []string{
+		`<nav class="eyebrow" aria-label="Breadcrumb"><a href="` + productionPath + `/dashboard">Production</a>`,
+		`<a href="` + actorPath + `">Ada</a>`,
+		`<a href="` + actorPath + `/items">items</a>`,
+		`href="` + actorPath + `">Back to Ada</a>`,
+	} {
+		if !strings.Contains(listBody, want) {
+			t.Fatalf("list page missing %q: %s", want, listBody)
+		}
+	}
+	if !strings.Contains(listBody, `href="`+actorPath+`/items">Refresh</a>`) {
+		t.Fatalf("list refresh link missing: %s", listBody)
+	}
+	edit := httptest.NewRecorder()
+	if err := h.EditCostumeItem(edit, costumeItemRequest(http.MethodGet, costumeItemDetailPath(production.ID, actor.ID, item.ID)+"/edit", nil)); err != nil {
+		t.Fatal(err)
+	}
+	editBody := edit.Body.String()
+	for _, want := range []string{
+		`<a href="` + productionPath + `/dashboard">Production</a>`,
+		`<a href="` + actorPath + `">Ada</a>`,
+		`/items/` + strconv.FormatInt(item.ID, 10) + `/edit">item</a>`,
+		`href="` + actorPath + `">Back to Ada</a>`,
+	} {
+		if !strings.Contains(editBody, want) {
+			t.Fatalf("edit page missing %q: %s", want, editBody)
+		}
+	}
+	if !strings.Contains(editBody, `/items/`+strconv.FormatInt(item.ID, 10)+`/edit">Refresh</a>`) {
+		t.Fatalf("edit refresh link missing: %s", editBody)
+	}
+}
+
 func TestCostumeItemCopyAndPasteUsesTypeAndDescriptionOnly(t *testing.T) {
 	h, production, actor, typ, ctx := costumeItemFixture(t)
 	otherActor, err := h.actors.Create(ctx, storage.CreateActorInput{ProductionID: production.ID, Name: "Bea"})
@@ -266,6 +315,57 @@ func TestCostumeItemCopyAndPasteUsesTypeAndDescriptionOnly(t *testing.T) {
 	}
 	if !descriptions["Blue cloak"] || !descriptions["Silver clasp"] {
 		t.Fatalf("pasted descriptions = %#v", descriptions)
+	}
+}
+
+func TestCostumeItemCreateRoutePersistsAddForm(t *testing.T) {
+	db, err := storage.Open(filepath.Join(t.TempDir(), "costume-items-route.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	ctx := context.Background()
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	productions := storage.NewProductionRepository(db)
+	actors := storage.NewActorRepository(db)
+	types := storage.NewItemTypeRepository(db)
+	items := storage.NewCostumeItemRepository(db)
+	production, err := productions.Create(ctx, storage.CreateProductionInput{Name: "Macbeth"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor, err := actors.Create(ctx, storage.CreateActorInput{ProductionID: production.ID, Name: "Ada"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	itemType, err := types.Create(ctx, storage.CreateItemTypeInput{ProductionID: production.ID, Name: "Cloak"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), Dependencies{Readiness: db})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := costumeItemListPath(production.ID, actor.ID)
+	request := costumeItemRequest(http.MethodPost, path, url.Values{
+		"item_type_id": {strconv.FormatInt(itemType.ID, 10)},
+		"description":  {"Blue cloak"},
+		"status":       {storage.StatusFind},
+		"progress":     {"0"},
+	})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusSeeOther || response.Header().Get("Location") != path {
+		t.Fatalf("add item route = %d location=%q", response.Code, response.Header().Get("Location"))
+	}
+	created, err := items.List(ctx, storage.CostumeItemFilter{ProductionID: production.ID, ActorID: actor.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(created) != 1 || created[0].ItemTypeID != itemType.ID || created[0].Description != "Blue cloak" {
+		t.Fatalf("created items = %#v", created)
 	}
 }
 

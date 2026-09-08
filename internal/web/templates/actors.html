@@ -22,7 +22,7 @@
   </div></header>
   <main class="page-shell">
     <section class="page-intro" aria-labelledby="production-title">
-      <div><p class="eyebrow">Workspace / first run</p><h1 id="production-title">Name your production.</h1><p class="page-intro__copy">Create the production that will hold your cast and costume inventory.</p></div>
+      <div><nav class="eyebrow" aria-label="Breadcrumb"><a href="/production">Workspace</a><span aria-hidden="true"> / </span><a href="/production">first run</a></nav><h1 id="production-title">Name your production.</h1><p class="page-intro__copy">Create the production that will hold your cast and costume inventory.</p></div>
     </section>
     <section class="form-section" aria-labelledby="production-form-title">
       <div class="section-heading"><div><p class="section-kicker">Production</p><h2 id="production-form-title">Start a workspace</h2></div><p>A production keeps actors and item types safely scoped together.</p></div>
@@ -81,7 +81,7 @@
   </div></header>
   <main class="page-shell">
     <section class="page-intro" aria-labelledby="actors-page-title">
-      <div><p class="eyebrow">Workspace / cast</p><h1 id="actors-page-title">{{with .Production}}{{.Name}}{{end}} actors.</h1><p class="page-intro__copy">Keep names, roles, and fitting notes in one clear cast list.</p></div>
+      <div><nav class="eyebrow" aria-label="Breadcrumb"><a href="/production/{{.Production.ID}}/dashboard">Workspace</a><span aria-hidden="true"> / </span><a href="/production/{{.Production.ID}}/actors">cast</a></nav><h1 id="actors-page-title">{{with .Production}}{{.Name}}{{end}} actors.</h1><p class="page-intro__copy">Keep names, roles, and fitting notes in one clear cast list.</p></div>
     </section>
     <section aria-labelledby="actors-list-title"><div class="section-heading"><div><p class="section-kicker">Cast register</p><h2 id="actors-list-title">Actors</h2></div><p>Archived actors stay visible for a reliable history and are never deleted.</p></div>{{template "actor-list" .}}</section>
     <section class="form-section" id="add-actor" aria-labelledby="actor-form-title"><div class="section-heading"><div><p class="section-kicker">Cast register</p><h2 id="actor-form-title">{{if .ActorForm.Editing}}Edit actor{{else}}Add an actor{{end}}</h2></div><p>Names may repeat when two performers share a billing name.</p></div>{{template "actor-form" .}}</section>

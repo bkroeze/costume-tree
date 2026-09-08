@@ -57,6 +57,9 @@ func TestBulkImportPreviewCommitAndRepeatedRows(t *testing.T) {
 	if previewResponse.Code != http.StatusOK || !strings.Contains(previewResponse.Body.String(), "Commit import") || !strings.Contains(previewResponse.Body.String(), "name=\"token\"") {
 		t.Fatalf("preview = %d %s", previewResponse.Code, previewResponse.Body.String())
 	}
+	if !strings.Contains(previewResponse.Body.String(), `<nav class="eyebrow" aria-label="Breadcrumb"><a href="/production/`+strconvFormat(production.ID)+`/dashboard">Production</a><span aria-hidden="true"> / </span><a href="/production/`+strconvFormat(production.ID)+`/bulk">intake</a></nav>`) {
+		t.Fatalf("bulk import breadcrumb links missing: %s", previewResponse.Body.String())
+	}
 	token := h.previewsTokenForTest()
 	commitResponse := httptest.NewRecorder()
 	commit := bulkWebRequest(http.MethodPost, bulkPath(production.ID), url.Values{"action": {"commit"}, "token": {token}})

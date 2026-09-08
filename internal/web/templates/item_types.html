@@ -25,7 +25,7 @@
   <main class="page-shell" id="item-types-page">
     <section class="page-intro" aria-labelledby="item-types-title">
       <div>
-        <p class="eyebrow">Production / settings</p>
+        <nav class="eyebrow" aria-label="Breadcrumb"><a href="/production/{{.Production.ID}}/dashboard">Production</a><span aria-hidden="true"> / </span><a href="/production/{{.Production.ID}}/item-types">settings</a></nav>
         <h1 id="item-types-title">Item types</h1>
         <p class="page-intro__copy">Keep the vocabulary for {{.Production.Name}} clear and reusable.</p>
       </div>

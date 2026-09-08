@@ -123,6 +123,9 @@ func TestItemTypeListSupportsFullPageAndHTMXFragment(t *testing.T) {
 	if full.Code != http.StatusOK || !strings.Contains(full.Body.String(), "<html") || !strings.Contains(full.Body.String(), "Cloak") {
 		t.Fatalf("full response status/body = %d/%s", full.Code, full.Body.String())
 	}
+	if !strings.Contains(full.Body.String(), `<nav class="eyebrow" aria-label="Breadcrumb"><a href="/production/`+strconvFormat(production.ID)+`/dashboard">Production</a><span aria-hidden="true"> / </span><a href="/production/`+strconvFormat(production.ID)+`/item-types">settings</a></nav>`) {
+		t.Fatalf("item types breadcrumb links missing: %s", full.Body.String())
+	}
 
 	fragmentRequest := itemTypeRequest(http.MethodGet, path, nil)
 	fragmentRequest.Header.Set("HX-Request", "true")

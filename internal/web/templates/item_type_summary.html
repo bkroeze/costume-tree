@@ -20,9 +20,8 @@
     <a class="brand" href="/" aria-label="Costume Tree home"><span class="brand-mark" aria-hidden="true"><img src="/assets/favicon-dark-32x32.png" alt="" width="32" height="32"></span><span class="brand-copy"><span>Costume Tree</span><small>Wardrobe operations</small></span></a>
     <a class="badge" href="/production/{{.Production.ID}}/dashboard">{{.Production.Name}}</a>
   </div></header>
-  <main class="page-shell" id="item-type-summary-page">
     <section class="page-intro" aria-labelledby="item-type-summary-title">
-      <div><p class="eyebrow">Production / overview</p><h1 id="item-type-summary-title">Production summary</h1><p class="page-intro__copy">See every active costume type at a glance, with counts that open the matching inventory.</p></div>
+      <div><nav class="eyebrow" aria-label="Breadcrumb"><a href="/production/{{.Production.ID}}/dashboard">Production</a><span aria-hidden="true"> / </span><a href="/production/{{.Production.ID}}/summary">overview</a></nav><h1 id="item-type-summary-title">Production summary</h1><p class="page-intro__copy">See every active costume type at a glance, with counts that open the matching inventory.</p></div>
     </section>
     <div id="item-type-summary">{{template "item-type-summary" .}}</div>
   </main>
