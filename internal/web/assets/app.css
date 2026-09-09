@@ -697,6 +697,43 @@ a.badge {
   align-items: center;
   gap: 0.85rem;
 }
+.actor-identity {
+  display: grid;
+  min-width: 0;
+  gap: 0.3rem;
+}
+
+.actor-name-card {
+  display: inline-block;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  justify-self: start;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-small);
+  padding: 0.55rem 0.75rem;
+  background: var(--yellow);
+  box-shadow: var(--shadow-small);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.actor-name-card:hover {
+  background: var(--yellow-soft);
+}
+
+.actor-name-card .actor-name-text {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.quick-actor-search {
+  display: grid;
+  gap: 0.3rem;
+  max-width: 420px;
+  margin: 0 0 1.25rem;
+}
+
 
 .badge-icon {
   display: grid;
@@ -916,8 +953,10 @@ a.badge {
 }
 
 .report-modal__card {
+  display: flex;
   max-height: calc(100vh - 2rem);
-  overflow: auto;
+  flex-direction: column;
+  overflow: hidden;
   padding: 1.25rem;
 }
 
@@ -936,9 +975,9 @@ a.badge {
 }
 
 .report-modal__actions {
-  margin-top: 1.25rem;
-  border-top: 2px dashed #bbc4d0;
-  padding-top: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 2px dashed #bbc4d0;
+  padding-bottom: 1rem;
 }
 
 .report-modal__actions p {
@@ -949,7 +988,10 @@ a.badge {
 
 .report-document {
   display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
   gap: 0.8rem;
+  overflow: auto;
   color: #111827;
   font-family: Arial, sans-serif;
 }
@@ -1138,6 +1180,7 @@ a.badge {
   }
 
   .filter-controls {
+    flex: none;
     justify-content: stretch;
   }
 }
@@ -1173,6 +1216,7 @@ a.badge {
   }
 
   .field-inline {
+    flex: none;
     min-width: 100%;
   }
 
@@ -1184,6 +1228,15 @@ a.badge {
   .form-grid {
     grid-template-columns: 1fr;
   }
+  .pieces-label {
+    display: none;
+  }
+
+  .status-legend {
+    gap: 0.3rem;
+    margin-top: 0;
+  }
+
 
   .form-grid .field-stack:last-child {
     grid-column: auto;

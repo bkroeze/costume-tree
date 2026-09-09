@@ -33,13 +33,13 @@
     <dialog class="report-modal" open aria-labelledby="report-modal-title">
       <div class="report-modal__card">
         <div class="report-modal__header"><div><p class="section-kicker">Copy-ready report</p><h2 id="report-modal-title">{{.Production.Name}} · {{if eq .Status "all"}}All statuses{{else}}{{.Status}}{{end}}</h2></div><button class="btn-brutal btn-white btn-sm" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+        <div class="report-modal__actions"><button class="btn-brutal btn-cobalt" type="button" onclick="copyReport(this)">Copy to clipboard</button><p id="report-copy-status" role="status" aria-live="polite"></p></div>
         <div id="report-document" class="report-document">
           <h3>{{.Production.Name}} costume report</h3>
           <p>Status: <strong>{{if eq .Status "all"}}All statuses{{else}}{{.Status}}{{end}}</strong></p>
           <table class="report-table"><caption>Item count by category</caption><thead><tr><th scope="col">Category</th><th scope="col">Count</th></tr></thead><tbody>{{range .Report.Categories}}<tr><th scope="row">{{.ItemTypeName}}</th><td>{{.Count}}</td></tr>{{else}}<tr><td colspan="2">No matching items.</td></tr>{{end}}</tbody></table>
           {{if .Report.Accessories}}<h4>Accessories</h4><ul class="report-accessories">{{range .Report.Accessories}}<li><strong>{{.Code}}</strong> — {{if .Description}}{{.Description}}{{else}}No description{{end}} — {{.ActorName}}</li>{{end}}</ul>{{end}}
         </div>
-        <div class="report-modal__actions"><button class="btn-brutal btn-cobalt" type="button" onclick="copyReport(this)">Copy to clipboard</button><p id="report-copy-status" role="status" aria-live="polite"></p></div>
       </div>
     </dialog>
     {{end}}
