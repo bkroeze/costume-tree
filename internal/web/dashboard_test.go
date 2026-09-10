@@ -123,7 +123,6 @@ func TestDashboardAndWorkspaceRenderActiveData(t *testing.T) {
 		}
 		offset += index + len(statusCount)
 	}
-	assertWorkflowStatusOptions(t, body)
 	for _, label := range []string{"Total", "Complete", "Active work", "Blocked"} {
 		if !strings.Contains(response.Body.String(), `<p class="kpi-title">`+label+`</p>`) {
 			t.Fatalf("KPI %q missing in %s", label, response.Body.String())
@@ -138,7 +137,7 @@ func TestDashboardAndWorkspaceRenderActiveData(t *testing.T) {
 	if !strings.Contains(workspaceBody, `class="id-tag" href="`+wantEditURL+`">`+item.Code+`</a>`) {
 		t.Fatalf("workspace item id does not link to edit: %s", workspaceBody)
 	}
-	if workspace.Code != http.StatusOK || !strings.Contains(workspaceBody, "C-0001") || !strings.Contains(workspaceBody, "25") || !strings.Contains(workspaceBody, "Waiting for fabric") || !strings.Contains(workspaceBody, "Cloak:") || !strings.Contains(workspaceBody, `name="description"`) || !strings.Contains(workspaceBody, `placeholder="No description"`) || strings.Contains(workspaceBody, `<span class="status-brutal status-example">Make</span>`) {
+	if workspace.Code != http.StatusOK || !strings.Contains(workspaceBody, "C-0001") || !strings.Contains(workspaceBody, "Waiting for fabric") || !strings.Contains(workspaceBody, "Cloak") || !strings.Contains(workspaceBody, `name="description"`) || !strings.Contains(workspaceBody, `name="next_action"`) || strings.Contains(workspaceBody, `name="progress"`) || strings.Contains(workspaceBody, `<span class="status-brutal status-example">Make</span>`) {
 		t.Fatalf("workspace response = %d %s", workspace.Code, workspaceBody)
 	}
 	if !strings.Contains(workspaceBody, `<nav class="eyebrow" aria-label="Breadcrumb"><a href="/production/`+strconv.FormatInt(production.ID, 10)+`/dashboard">Production</a><span aria-hidden="true"> / </span><a href="/production/`+strconv.FormatInt(production.ID, 10)+`/workspace/`+strconv.FormatInt(actor.ID, 10)+`">actor workspace</a></nav>`) {
@@ -148,6 +147,66 @@ func TestDashboardAndWorkspaceRenderActiveData(t *testing.T) {
 		t.Fatalf("workspace refresh link missing: %s", workspaceBody)
 	}
 	assertWorkflowStatusOptions(t, workspaceBody)
+	if !strings.Contains(workspaceBody, `hx-target="#workspace-item-`+strconv.FormatInt(item.ID, 10)+`-feedback"`) || !strings.Contains(workspaceBody, `id="workspace-item-`+strconv.FormatInt(item.ID, 10)+`-feedback"`) {
+		t.Fatalf("workspace save feedback target missing: %s", workspaceBody)
+	}
+}
+
+func TestWorkspaceHTMXUpdateRendersInlineFeedback(t *testing.T) {
+	h, production, actor, item, cleanup := dashboardFixture(t)
+	defer cleanup()
+	path := "/production/" + strconv.FormatInt(production.ID, 10) + "/workspace/" + strconv.FormatInt(actor.ID, 10)
+	current := item.UpdatedAt.UTC().Format(time.RFC3339Nano)
+
+	assertFeedback := func(t *testing.T, response *httptest.ResponseRecorder, status int, class, message string) {
+		t.Helper()
+		body := response.Body.String()
+		if response.Code != status || !strings.Contains(body, `<span class="form-feedback `+class+`"`) || !strings.Contains(body, message) {
+			t.Fatalf("workspace HTMX feedback = %d %s", response.Code, body)
+		}
+		if strings.Contains(body, "<!doctype html>") || strings.Contains(body, "workspace-content") || strings.Contains(body, "Active inventory") {
+			t.Fatalf("workspace HTMX feedback rendered page content: %s", body)
+		}
+	}
+
+	invalid := dashboardRequest(http.MethodPost, path, url.Values{
+		"item_id":    {strconv.FormatInt(item.ID, 10)},
+		"updated_at": {current},
+		"status":     {storage.StatusMake},
+		"progress":   {"101"},
+	})
+	invalid.Header.Set("HX-Request", "true")
+	response := httptest.NewRecorder()
+	if err := h.Workspace(response, invalid); err != nil {
+		t.Fatal(err)
+	}
+	assertFeedback(t, response, http.StatusUnprocessableEntity, "form-feedback--error", "Progress must be a whole number from 0 to 100.")
+
+	stale := dashboardRequest(http.MethodPost, path, url.Values{
+		"item_id":    {strconv.FormatInt(item.ID, 10)},
+		"updated_at": {"2000-01-01T00:00:00Z"},
+		"status":     {storage.StatusAlterations},
+		"progress":   {"10"},
+	})
+	stale.Header.Set("HX-Request", "true")
+	response = httptest.NewRecorder()
+	if err := h.Workspace(response, stale); err != nil {
+		t.Fatal(err)
+	}
+	assertFeedback(t, response, http.StatusConflict, "form-feedback--error", "This item changed in another window. Reload before saving.")
+
+	updated := dashboardRequest(http.MethodPost, path, url.Values{
+		"item_id":    {strconv.FormatInt(item.ID, 10)},
+		"updated_at": {current},
+		"status":     {storage.StatusAlterations},
+		"progress":   {"10"},
+	})
+	updated.Header.Set("HX-Request", "true")
+	response = httptest.NewRecorder()
+	if err := h.Workspace(response, updated); err != nil {
+		t.Fatal(err)
+	}
+	assertFeedback(t, response, http.StatusOK, "form-feedback--success", "C-0001 updated.")
 }
 
 func TestWorkspaceRejectsStaleTimestampAndUpdatesStatus(t *testing.T) {

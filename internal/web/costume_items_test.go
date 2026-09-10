@@ -204,7 +204,7 @@ func TestCostumeItemPagesLinkBackThroughBreadcrumbsAndActor(t *testing.T) {
 		`<nav class="eyebrow" aria-label="Breadcrumb"><a href="` + productionPath + `/dashboard">Production</a>`,
 		`<a href="` + actorPath + `">Ada</a>`,
 		`<a href="` + actorPath + `/items">items</a>`,
-		`href="` + actorPath + `">Back to Ada</a>`,
+		`href="` + productionPath + `/dashboard#actor-` + strconv.FormatInt(actor.ID, 10) + `">Back to Ada</a>`,
 	} {
 		if !strings.Contains(listBody, want) {
 			t.Fatalf("list page missing %q: %s", want, listBody)
@@ -222,7 +222,7 @@ func TestCostumeItemPagesLinkBackThroughBreadcrumbsAndActor(t *testing.T) {
 		`<a href="` + productionPath + `/dashboard">Production</a>`,
 		`<a href="` + actorPath + `">Ada</a>`,
 		`/items/` + strconv.FormatInt(item.ID, 10) + `/edit">item</a>`,
-		`href="` + actorPath + `">Back to Ada</a>`,
+		`href="` + productionPath + `/dashboard#actor-` + strconv.FormatInt(actor.ID, 10) + `">Back to Ada</a>`,
 	} {
 		if !strings.Contains(editBody, want) {
 			t.Fatalf("edit page missing %q: %s", want, editBody)

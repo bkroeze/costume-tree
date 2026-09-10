@@ -647,13 +647,10 @@ func (h *CostumeItemHandler) EditCostumeItem(w http.ResponseWriter, r *http.Requ
 		return nil
 	}
 	if IsHTMX(r) {
-		model, err := h.detailModel(r.Context(), production, actor, updated)
-		if err != nil {
-			return err
-		}
-		return RenderFragment(w, h.pages, "costume-item-detail", http.StatusOK, model)
+		Redirect(w, r, dashboardActorPath(productionID, actorID), http.StatusSeeOther)
+		return nil
 	}
-	Redirect(w, r, detailPath, http.StatusSeeOther)
+	Redirect(w, r, dashboardActorPath(productionID, actorID), http.StatusSeeOther)
 	return nil
 }
 

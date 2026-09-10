@@ -30,7 +30,6 @@ type LandingPageModel struct {
 	TotalShows  int
 	TotalActors int
 	TotalPieces int
-	Demo        demoState
 }
 
 // LandingHandler serves the main landing page featuring the Option B Hero
@@ -54,14 +53,13 @@ func NewLandingHandler(
 
 // Landing handles GET /{$} by displaying the Option B hero showcase and all shows.
 func (h *LandingHandler) Landing(w http.ResponseWriter, r *http.Request) error {
-	return h.render(w, r, http.StatusOK, demoState{})
+	return h.render(w, r, http.StatusOK)
 }
 
-func (h *LandingHandler) render(w http.ResponseWriter, r *http.Request, status int, demo demoState) error {
+func (h *LandingHandler) render(w http.ResponseWriter, r *http.Request, status int) error {
 	ctx := r.Context()
 	model := LandingPageModel{
 		Title: "Costume Tree — Wardrobe Operations",
-		Demo:  demo,
 	}
 
 	if h.directory != nil {

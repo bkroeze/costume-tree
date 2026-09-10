@@ -867,17 +867,18 @@ a.badge {
   font-weight: 800;
 }
 
-.piece-description,
-.piece-next {
+.piece-description {
   color: var(--ink-muted);
   font-size: 0.82rem;
   font-weight: 600;
 }
 
-.piece-next {
-  margin-top: auto;
-  border-top: 2px dashed #bbc4d0;
-  padding-top: 0.55rem;
+.piece-card-brutal > .form-card {
+  margin-top: 0.4rem;
+}
+
+.piece-card-brutal > .form-card > .btn-brutal {
+  margin-top: 1rem;
 }
 
 .blocker-alert {
@@ -1349,7 +1350,6 @@ form.htmx-request button[type="submit"]::after {
 .form-feedback,
 .empty-state,
 .piece-description,
-.piece-next,
 .blocker-alert,
 .item-type-row,
 .section-heading,

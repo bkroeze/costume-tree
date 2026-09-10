@@ -168,11 +168,11 @@ func (h *DashboardHandler) Workspace(w http.ResponseWriter, r *http.Request) err
 		return dashboardStorageError("update workspace item", storage.ErrArchived)
 	}
 	updatedAt := strings.TrimSpace(r.FormValue("updated_at"))
-	if updatedAt == "" {
-		updatedAt = strings.TrimSpace(r.FormValue("updatedAt"))
-	}
 	if updatedAt == "" || !sameTimestamp(updatedAt, item.UpdatedAt) {
 		model := WorkspacePageModel{Errors: FieldErrors{"updated_at": "This item changed in another window. Reload before saving."}}
+		if IsHTMX(r) {
+			return h.renderWorkspaceFeedback(w, http.StatusConflict, model)
+		}
 		return h.renderWorkspace(w, r, http.StatusConflict, production, actor, model)
 	}
 	status := strings.TrimSpace(r.FormValue("status"))
@@ -180,6 +180,7 @@ func (h *DashboardHandler) Workspace(w http.ResponseWriter, r *http.Request) err
 		status = item.Status
 	}
 	description := strings.TrimSpace(r.FormValue("description"))
+	nextAction := strings.TrimSpace(r.FormValue("next_action"))
 	progress := item.Progress
 	if value := strings.TrimSpace(r.FormValue("progress")); value != "" {
 		progress, err = strconv.Atoi(value)
@@ -198,7 +199,7 @@ func (h *DashboardHandler) Workspace(w http.ResponseWriter, r *http.Request) err
 	}
 	updated, err := h.items.Update(r.Context(), storage.UpdateCostumeItemInput{
 		ProductionID: productionID, ID: item.ID, ActorID: actorID, ItemTypeID: item.ItemTypeID,
-		Description: description, Status: status, Progress: progress, NextAction: item.NextAction,
+		Description: description, Status: status, Progress: progress, NextAction: nextAction,
 		Blocker: item.Blocker, Notes: item.Notes, ExpectedUpdatedAt: &item.UpdatedAt,
 	})
 	if err != nil {
@@ -210,7 +211,7 @@ func (h *DashboardHandler) Workspace(w http.ResponseWriter, r *http.Request) err
 		return nil
 	}
 	model := WorkspacePageModel{Success: updated.Code + " updated."}
-	return h.renderWorkspace(w, r, http.StatusOK, production, actor, model)
+	return h.renderWorkspaceFeedback(w, http.StatusOK, model)
 }
 
 // ActorWorkspace is a conventional alias for mux composition roots.
@@ -284,7 +285,15 @@ func (h *DashboardHandler) renderWorkspace(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *DashboardHandler) workspaceValidation(w http.ResponseWriter, r *http.Request, production storage.Production, actor storage.Actor, message, field string) error {
-	return h.renderWorkspace(w, r, http.StatusUnprocessableEntity, production, actor, WorkspacePageModel{Errors: FieldErrors{field: message}})
+	model := WorkspacePageModel{Errors: FieldErrors{field: message}}
+	if IsHTMX(r) {
+		return h.renderWorkspaceFeedback(w, http.StatusUnprocessableEntity, model)
+	}
+	return h.renderWorkspace(w, r, http.StatusUnprocessableEntity, production, actor, model)
+}
+
+func (h *DashboardHandler) renderWorkspaceFeedback(w http.ResponseWriter, status int, model WorkspacePageModel) error {
+	return RenderFragment(w, h.pages, "workspace-feedback", status, model)
 }
 
 func (h *DashboardHandler) render(w http.ResponseWriter, r *http.Request, status int, fullName, fragmentName string, model any) error {
@@ -372,4 +381,7 @@ func parsePositive(value string) (int64, error) {
 }
 func workspacePath(productionID, actorID int64) string {
 	return "/production/" + strconv.FormatInt(productionID, 10) + "/workspace/" + strconv.FormatInt(actorID, 10)
+}
+func dashboardActorPath(productionID, actorID int64) string {
+	return "/production/" + strconv.FormatInt(productionID, 10) + "/dashboard#actor-" + strconv.FormatInt(actorID, 10)
 }

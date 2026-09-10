@@ -54,7 +54,7 @@ func TestLandingPageHeroAndShowsDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	banquo, err := actorRepo.Create(ctx, storage.CreateActorInput{ProductionID: macbeth.ID, Name: "Banquo"})
+	_, err = actorRepo.Create(ctx, storage.CreateActorInput{ProductionID: macbeth.ID, Name: "Banquo"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,15 +133,6 @@ func TestLandingPageHeroAndShowsDirectory(t *testing.T) {
 		t.Fatalf("new production page = %d %s", newProduction.Code, newProduction.Body.String())
 	}
 
-	demoRequest := httptest.NewRequest(http.MethodPost, "/demo", strings.NewReader("piece="))
-	demoRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	demoResponse := httptest.NewRecorder()
-	handler.ServeHTTP(demoResponse, demoRequest)
-	if demoResponse.Code != http.StatusUnprocessableEntity || !strings.Contains(demoResponse.Body.String(), "Enter a piece name") || !strings.Contains(demoResponse.Body.String(), "Macbeth") {
-		t.Fatalf("full-page demo response = %d %s", demoResponse.Code, demoResponse.Body.String())
-	}
-
-	_ = banquo
 }
 
 func TestLandingPropagatesDirectoryQueryFailures(t *testing.T) {

@@ -49,10 +49,6 @@ func (e *Error) Unwrap() error {
 	return e.Err
 }
 
-type demoState struct {
-	Error   string
-	Success string
-}
 
 type pageModel = LandingPageModel
 
@@ -76,7 +72,6 @@ func New(logger *slog.Logger, dependencies Dependencies) (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /assets/", cacheAssets(http.StripPrefix("/assets/", http.FileServer(http.FS(assets)))))
-	mux.Handle("POST /demo", server.handle("demo", server.demo))
 	mux.HandleFunc("GET /healthz", server.health)
 
 	if database, ok := readinessDatabase(dependencies.Readiness); ok {
@@ -93,7 +88,6 @@ func New(logger *slog.Logger, dependencies Dependencies) (http.Handler, error) {
 		reportsHandler := NewReportsHandler(productions, storage.NewReportRepository(database), pages)
 		bulkHandler := NewBulkImportHandler(productions, storage.NewBulkImporter(database), pages)
 		landingHandler := NewLandingHandler(storage.NewProductionDirectoryQueries(database), pages)
-		server.landing = landingHandler
 
 		mux.Handle("GET /{$}", server.handle("landing", landingHandler.Landing))
 		mux.Handle("GET /production/new", server.handle("production-new", actorHandler.NewProduction))
@@ -153,40 +147,12 @@ type server struct {
 	logger    *slog.Logger
 	pages     *template.Template
 	readiness Readiness
-	landing   *LandingHandler
 }
 
 func (s *server) home(w http.ResponseWriter, _ *http.Request) error {
 	return s.renderPage(w, http.StatusOK, pageModel{Title: "Costume Tree"})
 }
 
-func (s *server) demo(w http.ResponseWriter, r *http.Request) error {
-	if err := r.ParseForm(); err != nil {
-		return &Error{Status: http.StatusBadRequest, Message: "Unable to read the form.", Err: fmt.Errorf("parse demo form: %w", err)}
-	}
-
-	state := demoState{}
-	if strings.TrimSpace(r.FormValue("piece")) == "" {
-		state.Error = "Enter a piece name before submitting."
-	} else {
-		state.Success = "Preview saved. The piece is ready for inventory storage."
-	}
-
-	status := http.StatusOK
-	if state.Error != "" {
-		status = http.StatusUnprocessableEntity
-	}
-	if IsHTMX(r) {
-		if state.Success != "" {
-			SetTrigger(w, "demo:submitted")
-		}
-		return RenderFragment(w, s.pages, "demo-feedback", status, pageModel{Title: "Costume Tree", Demo: state})
-	}
-	if s.landing != nil {
-		return s.landing.render(w, r, status, state)
-	}
-	return s.renderPage(w, status, pageModel{Title: "Costume Tree", Demo: state})
-}
 
 func (s *server) renderPage(w http.ResponseWriter, status int, model pageModel) error {
 	var page bytes.Buffer
