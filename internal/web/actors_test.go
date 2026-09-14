@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,14 +14,7 @@ import (
 
 func actorHandlerFixture(t *testing.T) (*ActorHandler, *storage.DB) {
 	t.Helper()
-	db, err := storage.Open(filepath.Join(t.TempDir(), "costume-tree.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	if err := db.Migrate(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	db, _ := openWebTestDB(t)
 	pages, err := template.ParseFS(content, "templates/*.html")
 	if err != nil {
 		t.Fatal(err)

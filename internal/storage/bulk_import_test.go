@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"testing"
 
 	bulkinput "costume-tree/internal/bulk"
@@ -11,15 +10,7 @@ import (
 
 func bulkStorageFixture(t *testing.T) (*DB, Production, context.Context) {
 	t.Helper()
-	db, err := Open(filepath.Join(t.TempDir(), "bulk.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	ctx := context.Background()
-	if err := db.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	db, ctx := openTestDB(t)
 	production, err := NewProductionRepository(db).Create(ctx, CreateProductionInput{Name: "Macbeth"})
 	if err != nil {
 		t.Fatal(err)

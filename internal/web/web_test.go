@@ -142,7 +142,6 @@ func TestHealthzReflectsDatabaseReadiness(t *testing.T) {
 	})
 }
 
-
 func TestVendorAssetsAreEmbedded(t *testing.T) {
 	handler, err := New(slog.New(slog.NewTextHandler(io.Discard, nil)), Dependencies{})
 	if err != nil {

@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -24,16 +23,8 @@ func (q failingDirectoryQueries) ProductionDirectory(context.Context) ([]storage
 }
 
 func TestLandingPageHeroAndShowsDirectory(t *testing.T) {
-	db, err := storage.Open(filepath.Join(t.TempDir(), "costume-tree.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	if err := db.Migrate(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	db, ctx := openWebTestDB(t)
 
-	ctx := context.Background()
 	prodRepo := storage.NewProductionRepository(db)
 	actorRepo := storage.NewActorRepository(db)
 	itemRepo := storage.NewCostumeItemRepository(db)

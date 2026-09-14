@@ -24,152 +24,110 @@ func notFound(kind string) error {
 	return fmt.Errorf("%w: %s", ErrNotFound, kind)
 }
 
-func parseTimestamp(value string) (time.Time, error) {
-	if value == "" {
-		return time.Time{}, nil
+func archivedTimestamp(value sql.NullTime) *time.Time {
+	if !value.Valid {
+		return nil
 	}
-	parsed, err := time.Parse(time.RFC3339Nano, value)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("storage: parse timestamp %q: %w", value, err)
-	}
-	return parsed, nil
+	archived := value.Time.UTC()
+	return &archived
 }
 
 func scanProduction(scanner interface{ Scan(...any) error }) (Production, error) {
 	var result Production
-	var archived, created, updated string
-	if err := scanner.Scan(&result.ID, &result.Name, &archived, &created, &updated); err != nil {
+	var archived sql.NullTime
+	if err := scanner.Scan(&result.ID, &result.Name, &archived, &result.CreatedAt, &result.UpdatedAt); err != nil {
 		return Production{}, err
 	}
-	var err error
-	if result.ArchivedAt, err = archivedTimestamp(archived); err != nil {
-		return Production{}, err
-	}
-	if result.CreatedAt, err = parseTimestamp(created); err != nil {
-		return Production{}, err
-	}
-	if result.UpdatedAt, err = parseTimestamp(updated); err != nil {
-		return Production{}, err
-	}
+	result.ArchivedAt = archivedTimestamp(archived)
+	result.CreatedAt = result.CreatedAt.UTC()
+	result.UpdatedAt = result.UpdatedAt.UTC()
 	return result, nil
-}
-
-func archivedTimestamp(value string) (*time.Time, error) {
-	if value == "" {
-		return nil, nil
-	}
-	parsed, err := parseTimestamp(value)
-	if err != nil {
-		return nil, err
-	}
-	return &parsed, nil
 }
 
 func scanActor(scanner interface{ Scan(...any) error }) (Actor, error) {
 	var result Actor
-	var archived, created, updated string
-	if err := scanner.Scan(&result.ID, &result.ProductionID, &result.Name, &result.Role, &result.Notes, &archived, &created, &updated); err != nil {
+	var archived sql.NullTime
+	if err := scanner.Scan(&result.ID, &result.ProductionID, &result.Name, &result.Role, &result.Notes, &archived, &result.CreatedAt, &result.UpdatedAt); err != nil {
 		return Actor{}, err
 	}
-	var err error
-	if result.ArchivedAt, err = archivedTimestamp(archived); err != nil {
-		return Actor{}, err
-	}
-	if result.CreatedAt, err = parseTimestamp(created); err != nil {
-		return Actor{}, err
-	}
-	if result.UpdatedAt, err = parseTimestamp(updated); err != nil {
-		return Actor{}, err
-	}
+	result.ArchivedAt = archivedTimestamp(archived)
+	result.CreatedAt = result.CreatedAt.UTC()
+	result.UpdatedAt = result.UpdatedAt.UTC()
 	return result, nil
 }
 
 func scanItemType(scanner interface{ Scan(...any) error }) (ItemType, error) {
 	var result ItemType
-	var archived, created, updated string
-	if err := scanner.Scan(&result.ID, &result.ProductionID, &result.Name, &archived, &created, &updated); err != nil {
+	var archived sql.NullTime
+	if err := scanner.Scan(&result.ID, &result.ProductionID, &result.Name, &archived, &result.CreatedAt, &result.UpdatedAt); err != nil {
 		return ItemType{}, err
 	}
-	var err error
-	if result.ArchivedAt, err = archivedTimestamp(archived); err != nil {
-		return ItemType{}, err
-	}
-	if result.CreatedAt, err = parseTimestamp(created); err != nil {
-		return ItemType{}, err
-	}
-	if result.UpdatedAt, err = parseTimestamp(updated); err != nil {
-		return ItemType{}, err
-	}
+	result.ArchivedAt = archivedTimestamp(archived)
+	result.CreatedAt = result.CreatedAt.UTC()
+	result.UpdatedAt = result.UpdatedAt.UTC()
 	return result, nil
 }
 
 func scanCostumeItem(scanner interface{ Scan(...any) error }) (CostumeItem, error) {
 	var result CostumeItem
-	var archived, created, updated string
+	var archived sql.NullTime
 	if err := scanner.Scan(
 		&result.ID, &result.ProductionID, &result.ActorID, &result.ItemTypeID,
 		&result.Code, &result.Description, &result.Status, &result.Progress,
 		&result.NextAction, &result.Blocker, &result.Notes,
-		&archived, &created, &updated,
+		&archived, &result.CreatedAt, &result.UpdatedAt,
 	); err != nil {
 		return CostumeItem{}, err
 	}
-	var err error
-	if result.ArchivedAt, err = archivedTimestamp(archived); err != nil {
-		return CostumeItem{}, err
-	}
-	if result.CreatedAt, err = parseTimestamp(created); err != nil {
-		return CostumeItem{}, err
-	}
-	if result.UpdatedAt, err = parseTimestamp(updated); err != nil {
-		return CostumeItem{}, err
-	}
+	result.ArchivedAt = archivedTimestamp(archived)
+	result.CreatedAt = result.CreatedAt.UTC()
+	result.UpdatedAt = result.UpdatedAt.UTC()
 	return result, nil
 }
 
 func ensureProduction(ctx context.Context, query rowQuerier, id int64) error {
-	var archived string
+	var archived sql.NullTime
 	if err := query.QueryRowContext(ctx,
-		`SELECT COALESCE(archived_at, '') FROM productions WHERE id = ?`, id,
+		`SELECT archived_at FROM productions WHERE id = $1`, id,
 	).Scan(&archived); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return notFound("production")
 		}
 		return err
 	}
-	if archived != "" {
+	if archived.Valid {
 		return ErrArchived
 	}
 	return nil
 }
 
 func ensureActor(ctx context.Context, query rowQuerier, productionID, actorID int64) error {
-	var archived string
+	var archived sql.NullTime
 	if err := query.QueryRowContext(ctx,
-		`SELECT COALESCE(archived_at, '') FROM actors WHERE production_id = ? AND id = ?`, productionID, actorID,
+		`SELECT archived_at FROM actors WHERE production_id = $1 AND id = $2`, productionID, actorID,
 	).Scan(&archived); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return notFound("actor")
 		}
 		return err
 	}
-	if archived != "" {
+	if archived.Valid {
 		return ErrArchived
 	}
 	return nil
 }
 
 func ensureItemType(ctx context.Context, query rowQuerier, productionID, itemTypeID int64) error {
-	var archived string
+	var archived sql.NullTime
 	if err := query.QueryRowContext(ctx,
-		`SELECT COALESCE(archived_at, '') FROM item_types WHERE production_id = ? AND id = ?`, productionID, itemTypeID,
+		`SELECT archived_at FROM item_types WHERE production_id = $1 AND id = $2`, productionID, itemTypeID,
 	).Scan(&archived); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return notFound("item type")
 		}
 		return err
 	}
-	if archived != "" {
+	if archived.Valid {
 		return ErrArchived
 	}
 	return nil
@@ -182,7 +140,7 @@ func NewProductionRepository(db *DB) ProductionRepository {
 	return &productionRepository{db: db}
 }
 
-const productionColumns = `id, name, COALESCE(archived_at, ''), created_at, updated_at`
+const productionColumns = `id, name, archived_at, created_at, updated_at`
 
 func (r *productionRepository) Create(ctx context.Context, input CreateProductionInput) (Production, error) {
 	name := strings.TrimSpace(input.Name)
@@ -192,13 +150,9 @@ func (r *productionRepository) Create(ctx context.Context, input CreateProductio
 	if r.db == nil || r.db.db == nil {
 		return Production{}, errors.New("storage: database is closed")
 	}
-	result, err := r.db.db.ExecContext(ctx, `INSERT INTO productions (name) VALUES (?)`, name)
-	if err != nil {
+	var id int64
+	if err := r.db.db.QueryRowContext(ctx, `INSERT INTO productions (name) VALUES ($1) RETURNING id`, name).Scan(&id); err != nil {
 		return Production{}, fmt.Errorf("storage: create production: %w", err)
-	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return Production{}, fmt.Errorf("storage: create production id: %w", err)
 	}
 	return r.Get(ctx, id)
 }
@@ -208,7 +162,7 @@ func (r *productionRepository) Get(ctx context.Context, id int64) (Production, e
 		return Production{}, errors.New("storage: database is closed")
 	}
 	result, err := scanProduction(r.db.db.QueryRowContext(ctx,
-		`SELECT `+productionColumns+` FROM productions WHERE id = ?`, id,
+		`SELECT `+productionColumns+` FROM productions WHERE id = $1`, id,
 	))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -256,7 +210,7 @@ func (r *productionRepository) Update(ctx context.Context, input UpdateProductio
 		return Production{}, errors.New("storage: database is closed")
 	}
 	result, err := r.db.db.ExecContext(ctx,
-		`UPDATE productions SET name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`, name, input.ID,
+		`UPDATE productions SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, name, input.ID,
 	)
 	if err != nil {
 		return Production{}, fmt.Errorf("storage: update production: %w", err)
@@ -272,7 +226,7 @@ func (r *productionRepository) Archive(ctx context.Context, id int64) error {
 		return errors.New("storage: database is closed")
 	}
 	result, err := r.db.db.ExecContext(ctx,
-		`UPDATE productions SET archived_at = COALESCE(archived_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`, id,
+		`UPDATE productions SET archived_at = COALESCE(archived_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = $1`, id,
 	)
 	if err != nil {
 		return fmt.Errorf("storage: archive production: %w", err)
@@ -292,7 +246,7 @@ type actorRepository struct{ db *DB }
 
 func NewActorRepository(db *DB) ActorRepository { return &actorRepository{db: db} }
 
-const actorColumns = `id, production_id, name, role, notes, COALESCE(archived_at, ''), created_at, updated_at`
+const actorColumns = `id, production_id, name, role, notes, archived_at, created_at, updated_at`
 
 func (r *actorRepository) Create(ctx context.Context, input CreateActorInput) (Actor, error) {
 	name := strings.TrimSpace(input.Name)
@@ -307,18 +261,14 @@ func (r *actorRepository) Create(ctx context.Context, input CreateActorInput) (A
 	if err := ensureProduction(ctx, tx, input.ProductionID); err != nil {
 		return Actor{}, err
 	}
-	result, err := tx.ExecContext(ctx,
-		`INSERT INTO actors (production_id, name, role, notes) VALUES (?, ?, ?, ?)`,
+	var id int64
+	if err := tx.QueryRowContext(ctx,
+		`INSERT INTO actors (production_id, name, role, notes) VALUES ($1, $2, $3, $4) RETURNING id`,
 		input.ProductionID, name, input.Role, input.Notes,
-	)
-	if err != nil {
+	).Scan(&id); err != nil {
 		return Actor{}, fmt.Errorf("storage: create actor: %w", err)
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return Actor{}, fmt.Errorf("storage: create actor id: %w", err)
-	}
-	item, err := scanActor(tx.QueryRowContext(ctx, `SELECT `+actorColumns+` FROM actors WHERE production_id = ? AND id = ?`, input.ProductionID, id))
+	item, err := scanActor(tx.QueryRowContext(ctx, `SELECT `+actorColumns+` FROM actors WHERE production_id = $1 AND id = $2`, input.ProductionID, id))
 	if err != nil {
 		return Actor{}, fmt.Errorf("storage: read actor: %w", err)
 	}
@@ -330,7 +280,7 @@ func (r *actorRepository) Create(ctx context.Context, input CreateActorInput) (A
 
 func (r *actorRepository) Get(ctx context.Context, productionID, id int64) (Actor, error) {
 	item, err := scanActor(r.db.db.QueryRowContext(ctx,
-		`SELECT `+actorColumns+` FROM actors WHERE production_id = ? AND id = ?`, productionID, id,
+		`SELECT `+actorColumns+` FROM actors WHERE production_id = $1 AND id = $2`, productionID, id,
 	))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -342,7 +292,7 @@ func (r *actorRepository) Get(ctx context.Context, productionID, id int64) (Acto
 }
 
 func (r *actorRepository) List(ctx context.Context, productionID int64, includeArchived ...bool) ([]Actor, error) {
-	query := `SELECT ` + actorColumns + ` FROM actors WHERE production_id = ?`
+	query := `SELECT ` + actorColumns + ` FROM actors WHERE production_id = $1`
 	args := []any{productionID}
 	if !firstBool(includeArchived) {
 		query += ` AND archived_at IS NULL`
@@ -373,7 +323,7 @@ func (r *actorRepository) Update(ctx context.Context, input UpdateActorInput) (A
 		return Actor{}, errors.New("storage: actor name is required")
 	}
 	result, err := r.db.db.ExecContext(ctx,
-		`UPDATE actors SET name = ?, role = ?, notes = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE production_id = ? AND id = ?`,
+		`UPDATE actors SET name = $1, role = $2, notes = $3, updated_at = CURRENT_TIMESTAMP WHERE production_id = $4 AND id = $5`,
 		name, input.Role, input.Notes, input.ProductionID, input.ID,
 	)
 	if err != nil {
@@ -387,7 +337,7 @@ func (r *actorRepository) Update(ctx context.Context, input UpdateActorInput) (A
 
 func (r *actorRepository) Archive(ctx context.Context, productionID, id int64) error {
 	result, err := r.db.db.ExecContext(ctx,
-		`UPDATE actors SET archived_at = COALESCE(archived_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE production_id = ? AND id = ?`,
+		`UPDATE actors SET archived_at = COALESCE(archived_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE production_id = $1 AND id = $2`,
 		productionID, id,
 	)
 	if err != nil {
@@ -404,7 +354,7 @@ type itemTypeRepository struct{ db *DB }
 
 func NewItemTypeRepository(db *DB) ItemTypeRepository { return &itemTypeRepository{db: db} }
 
-const itemTypeColumns = `id, production_id, name, COALESCE(archived_at, ''), created_at, updated_at`
+const itemTypeColumns = `id, production_id, name, archived_at, created_at, updated_at`
 
 func (r *itemTypeRepository) Create(ctx context.Context, input CreateItemTypeInput) (ItemType, error) {
 	name := strings.TrimSpace(input.Name)
@@ -419,17 +369,13 @@ func (r *itemTypeRepository) Create(ctx context.Context, input CreateItemTypeInp
 	if err := ensureProduction(ctx, tx, input.ProductionID); err != nil {
 		return ItemType{}, err
 	}
-	result, err := tx.ExecContext(ctx,
-		`INSERT INTO item_types (production_id, name) VALUES (?, ?)`, input.ProductionID, name,
-	)
-	if err != nil {
+	var id int64
+	if err := tx.QueryRowContext(ctx,
+		`INSERT INTO item_types (production_id, name) VALUES ($1, $2) RETURNING id`, input.ProductionID, name,
+	).Scan(&id); err != nil {
 		return ItemType{}, fmt.Errorf("storage: create item type: %w", err)
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return ItemType{}, fmt.Errorf("storage: create item type id: %w", err)
-	}
-	item, err := scanItemType(tx.QueryRowContext(ctx, `SELECT `+itemTypeColumns+` FROM item_types WHERE production_id = ? AND id = ?`, input.ProductionID, id))
+	item, err := scanItemType(tx.QueryRowContext(ctx, `SELECT `+itemTypeColumns+` FROM item_types WHERE production_id = $1 AND id = $2`, input.ProductionID, id))
 	if err != nil {
 		return ItemType{}, fmt.Errorf("storage: read item type: %w", err)
 	}
@@ -441,7 +387,7 @@ func (r *itemTypeRepository) Create(ctx context.Context, input CreateItemTypeInp
 
 func (r *itemTypeRepository) Get(ctx context.Context, productionID, id int64) (ItemType, error) {
 	item, err := scanItemType(r.db.db.QueryRowContext(ctx,
-		`SELECT `+itemTypeColumns+` FROM item_types WHERE production_id = ? AND id = ?`, productionID, id,
+		`SELECT `+itemTypeColumns+` FROM item_types WHERE production_id = $1 AND id = $2`, productionID, id,
 	))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -453,7 +399,7 @@ func (r *itemTypeRepository) Get(ctx context.Context, productionID, id int64) (I
 }
 
 func (r *itemTypeRepository) List(ctx context.Context, productionID int64, includeArchived ...bool) ([]ItemType, error) {
-	query := `SELECT ` + itemTypeColumns + ` FROM item_types WHERE production_id = ?`
+	query := `SELECT ` + itemTypeColumns + ` FROM item_types WHERE production_id = $1`
 	if !firstBool(includeArchived) {
 		query += ` AND archived_at IS NULL`
 	}
@@ -483,7 +429,7 @@ func (r *itemTypeRepository) Update(ctx context.Context, input UpdateItemTypeInp
 		return ItemType{}, errors.New("storage: item type name is required")
 	}
 	result, err := r.db.db.ExecContext(ctx,
-		`UPDATE item_types SET name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE production_id = ? AND id = ?`,
+		`UPDATE item_types SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE production_id = $2 AND id = $3`,
 		name, input.ProductionID, input.ID,
 	)
 	if err != nil {
@@ -497,7 +443,7 @@ func (r *itemTypeRepository) Update(ctx context.Context, input UpdateItemTypeInp
 
 func (r *itemTypeRepository) Archive(ctx context.Context, productionID, id int64) error {
 	result, err := r.db.db.ExecContext(ctx,
-		`UPDATE item_types SET archived_at = COALESCE(archived_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE production_id = ? AND id = ?`,
+		`UPDATE item_types SET archived_at = COALESCE(archived_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE production_id = $1 AND id = $2`,
 		productionID, id,
 	)
 	if err != nil {
@@ -512,7 +458,7 @@ func (r *itemTypeRepository) Archive(ctx context.Context, productionID, id int64
 // Restore reactivates an archived item type while preserving its ID.
 func (r *itemTypeRepository) Restore(ctx context.Context, productionID, id int64) error {
 	result, err := r.db.db.ExecContext(ctx,
-		`UPDATE item_types SET archived_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE production_id = ? AND id = ?`,
+		`UPDATE item_types SET archived_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE production_id = $1 AND id = $2`,
 		productionID, id,
 	)
 	if err != nil {
@@ -531,7 +477,7 @@ func NewCostumeItemRepository(db *DB) CostumeItemRepository {
 	return &costumeItemRepository{db: db}
 }
 
-const costumeItemColumns = `id, production_id, actor_id, item_type_id, code, description, status, progress, next_action, blocker, notes, COALESCE(archived_at, ''), created_at, updated_at`
+const costumeItemColumns = `id, production_id, actor_id, item_type_id, code, description, status, progress, next_action, blocker, notes, archived_at, created_at, updated_at`
 
 func allocateCodeTx(ctx context.Context, tx *sql.Tx, productionID int64) (string, error) {
 	if err := ensureProduction(ctx, tx, productionID); err != nil {
@@ -539,7 +485,7 @@ func allocateCodeTx(ctx context.Context, tx *sql.Tx, productionID int64) (string
 	}
 	var value int64
 	if err := tx.QueryRowContext(ctx,
-		`INSERT INTO production_item_sequences (production_id, next_value) VALUES (?, 1)
+		`INSERT INTO production_item_sequences (production_id, next_value) VALUES ($1, 1)
 		 ON CONFLICT (production_id) DO UPDATE SET next_value = production_item_sequences.next_value + 1
 		 RETURNING next_value`,
 		productionID,
@@ -588,21 +534,18 @@ func (r *costumeItemRepository) Create(ctx context.Context, input CreateCostumeI
 	if err != nil {
 		return CostumeItem{}, err
 	}
-	result, err := tx.ExecContext(ctx,
+	var id int64
+	if err := tx.QueryRowContext(ctx,
 		`INSERT INTO costume_items (production_id, actor_id, item_type_id, code, description, status, progress, next_action, blocker, notes)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		 RETURNING id`,
 		input.ProductionID, input.ActorID, input.ItemTypeID, code, input.Description, status, input.Progress,
 		input.NextAction, input.Blocker, input.Notes,
-	)
-	if err != nil {
+	).Scan(&id); err != nil {
 		return CostumeItem{}, fmt.Errorf("storage: create costume item: %w", err)
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return CostumeItem{}, fmt.Errorf("storage: create costume item id: %w", err)
-	}
 	item, err := scanCostumeItem(tx.QueryRowContext(ctx,
-		`SELECT `+costumeItemColumns+` FROM costume_items WHERE production_id = ? AND id = ?`, input.ProductionID, id,
+		`SELECT `+costumeItemColumns+` FROM costume_items WHERE production_id = $1 AND id = $2`, input.ProductionID, id,
 	))
 	if err != nil {
 		return CostumeItem{}, fmt.Errorf("storage: read costume item: %w", err)
@@ -615,7 +558,7 @@ func (r *costumeItemRepository) Create(ctx context.Context, input CreateCostumeI
 
 func (r *costumeItemRepository) Get(ctx context.Context, productionID, id int64) (CostumeItem, error) {
 	item, err := scanCostumeItem(r.db.db.QueryRowContext(ctx,
-		`SELECT `+costumeItemColumns+` FROM costume_items WHERE production_id = ? AND id = ?`, productionID, id,
+		`SELECT `+costumeItemColumns+` FROM costume_items WHERE production_id = $1 AND id = $2`, productionID, id,
 	))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -627,30 +570,25 @@ func (r *costumeItemRepository) Get(ctx context.Context, productionID, id int64)
 }
 
 func (r *costumeItemRepository) List(ctx context.Context, filter CostumeItemFilter) ([]CostumeItem, error) {
-	query := `SELECT ` + costumeItemColumns + ` FROM costume_items WHERE production_id = ?`
+	query := `SELECT ` + costumeItemColumns + ` FROM costume_items WHERE production_id = $1`
 	args := []any{filter.ProductionID}
 	if !filter.IncludeArchived {
 		query += ` AND archived_at IS NULL`
 	}
 	if filter.ActorID != 0 {
-		query += ` AND actor_id = ?`
-		args = append(args, filter.ActorID)
+		query += ` AND actor_id = ` + postgresPlaceholder(&args, filter.ActorID)
 	}
 	if filter.ItemTypeID != 0 {
-		query += ` AND item_type_id = ?`
-		args = append(args, filter.ItemTypeID)
+		query += ` AND item_type_id = ` + postgresPlaceholder(&args, filter.ItemTypeID)
 	}
 	if filter.Code != "" {
-		query += ` AND code = ?`
-		args = append(args, filter.Code)
+		query += ` AND code = ` + postgresPlaceholder(&args, filter.Code)
 	}
 	if filter.Status != "" {
-		query += ` AND status = ?`
-		args = append(args, filter.Status)
+		query += ` AND status = ` + postgresPlaceholder(&args, filter.Status)
 	}
 	if filter.Incomplete {
-		query += ` AND status <> ?`
-		args = append(args, StatusComplete)
+		query += ` AND status <> ` + postgresPlaceholder(&args, StatusComplete)
 	}
 	if filter.Blocked {
 		query += ` AND length(trim(blocker)) > 0`
@@ -698,8 +636,8 @@ func (r *costumeItemRepository) Update(ctx context.Context, input UpdateCostumeI
 		return CostumeItem{}, err
 	}
 	result, err := tx.ExecContext(ctx,
-		`UPDATE costume_items SET actor_id = ?, item_type_id = ?, description = ?, status = ?, progress = ?, next_action = ?, blocker = ?, notes = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-		 WHERE production_id = ? AND id = ?`,
+		`UPDATE costume_items SET actor_id = $1, item_type_id = $2, description = $3, status = $4, progress = $5, next_action = $6, blocker = $7, notes = $8, updated_at = CURRENT_TIMESTAMP
+		 WHERE production_id = $9 AND id = $10`,
 		input.ActorID, input.ItemTypeID, input.Description, input.Status, input.Progress, input.NextAction, input.Blocker, input.Notes,
 		input.ProductionID, input.ID,
 	)
@@ -710,7 +648,7 @@ func (r *costumeItemRepository) Update(ctx context.Context, input UpdateCostumeI
 		return CostumeItem{}, notFound("costume item")
 	}
 	item, err := scanCostumeItem(tx.QueryRowContext(ctx,
-		`SELECT `+costumeItemColumns+` FROM costume_items WHERE production_id = ? AND id = ?`, input.ProductionID, input.ID,
+		`SELECT `+costumeItemColumns+` FROM costume_items WHERE production_id = $1 AND id = $2`, input.ProductionID, input.ID,
 	))
 	if err != nil {
 		return CostumeItem{}, fmt.Errorf("storage: read costume item: %w", err)
@@ -723,7 +661,7 @@ func (r *costumeItemRepository) Update(ctx context.Context, input UpdateCostumeI
 
 func (r *costumeItemRepository) Archive(ctx context.Context, productionID, id int64) error {
 	result, err := r.db.db.ExecContext(ctx,
-		`UPDATE costume_items SET archived_at = COALESCE(archived_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE production_id = ? AND id = ?`,
+		`UPDATE costume_items SET archived_at = COALESCE(archived_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE production_id = $1 AND id = $2`,
 		productionID, id,
 	)
 	if err != nil {

@@ -15,7 +15,6 @@ func TestAccessibleInteractionScaffold(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-
 	t.Run("stylesheet includes interaction and narrow viewport safeguards", func(t *testing.T) {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/assets/app.css", nil))

@@ -1,4 +1,4 @@
-// Package storage owns SQLite persistence, schema migrations, and repositories.
+// Package storage owns PostgreSQL persistence, schema migrations, and repositories.
 package storage
 
 import (
@@ -8,12 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	_ "modernc.org/sqlite"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // migrations contains the ordered schema migrations shipped with the binary.
@@ -23,71 +24,36 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-// DB is an opened SQLite database. Call Migrate before using repositories.
+// DB is an opened PostgreSQL database. Call Migrate before using repositories.
 type DB struct {
 	db        *sql.DB
-	path      string
 	migrateMu sync.Mutex
 }
 
-const (
-	sqliteMaxOpenConns = 4
-	sqliteMaxIdleConns = 4
-	sqliteBusyTimeout  = 5 * time.Second
-)
+const migrationAdvisoryLockKey int64 = 0x43545245454d4947
 
 type migration struct {
 	version int
 	name    string
 }
 
-// Open opens path with SQLite settings suitable for the application. A path of
-// :memory: is supported for tests; ordinary paths are created when absent.
-func Open(path string) (*DB, error) {
-	if strings.TrimSpace(path) == "" {
-		return nil, errors.New("storage: database path is required")
+// Open opens and verifies a PostgreSQL connection pool.
+func Open(connectionString string) (*DB, error) {
+	if strings.TrimSpace(connectionString) == "" {
+		return nil, errors.New("storage: PostgreSQL connection string is required")
 	}
 
-	db, err := sql.Open("sqlite", sqliteDSN(path))
+	db, err := sql.Open("pgx", connectionString)
 	if err != nil {
 		return nil, fmt.Errorf("storage: open database: %w", err)
 	}
-	// SQLite has one writer. A small fixed pool allows a few readers without
-	// creating an unbounded queue of connections, while every connection gets
-	// the same busy timeout through sqliteDSN.
-	db.SetMaxOpenConns(sqliteMaxOpenConns)
-	db.SetMaxIdleConns(sqliteMaxIdleConns)
-
-	result := &DB{db: db, path: path}
-	if err := db.PingContext(context.Background()); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("storage: open database: %w: ping: %v", ErrInvalidDatabase, err)
-	}
-	if err := validateIntegrity(context.Background(), db); err != nil {
+	pingCtx, cancelPing := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelPing()
+	if err := db.PingContext(pingCtx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("storage: open database: %w", err)
 	}
-	return result, nil
-}
-
-func sqliteDSN(path string) string {
-	if path == ":memory:" {
-		path = "file::memory:?cache=shared"
-	} else if !strings.HasPrefix(path, "file:") {
-		path = "file:" + path
-	}
-
-	separator := "?"
-	if strings.Contains(path, "?") {
-		separator = "&"
-	}
-	return path + separator + strings.Join([]string{
-		"_pragma=foreign_keys(1)",
-		"_pragma=busy_timeout(" + strconv.FormatInt(sqliteBusyTimeout.Milliseconds(), 10) + ")",
-		"_pragma=journal_mode(WAL)",
-		"_pragma=synchronous(NORMAL)",
-		"_txlock=immediate",
-	}, "&")
+	return &DB{db: db}, nil
 }
 
 // SQL returns the underlying database handle for package-internal composition
@@ -99,18 +65,15 @@ func (d *DB) SQL() *sql.DB {
 	return d.db
 }
 
-// Ready verifies that the database is reachable, internally consistent, and
-// has the complete schema recorded by the embedded migrations. Migrate must be
-// called first on a fresh database.
+// Ready verifies that the database is reachable and has the complete schema
+// recorded by the embedded migrations. Migrate must be called first on a fresh
+// database.
 func (d *DB) Ready(ctx context.Context) error {
 	if d == nil || d.db == nil {
 		return errors.New("storage: database is closed")
 	}
 	if err := d.db.PingContext(ctx); err != nil {
 		return fmt.Errorf("storage: ping database: %w", err)
-	}
-	if err := validateIntegrity(ctx, d.db); err != nil {
-		return err
 	}
 	if err := validateSchema(ctx, d.db); err != nil {
 		return err
@@ -130,9 +93,9 @@ func (d *DB) Close() error {
 }
 
 // Migrate applies each embedded migration exactly once, in version order.
-// Existing databases without migration history are never modified unless
-// they are genuinely empty; this prevents a damaged or foreign database from
-// being silently rebuilt over.
+// Existing schemas without migration history are never modified unless they
+// are genuinely empty; this prevents a damaged or foreign schema from being
+// silently rebuilt over.
 func (d *DB) Migrate(ctx context.Context) error {
 	if d == nil || d.db == nil {
 		return errors.New("storage: database is closed")
@@ -141,9 +104,6 @@ func (d *DB) Migrate(ctx context.Context) error {
 	d.migrateMu.Lock()
 	defer d.migrateMu.Unlock()
 
-	if err := validateIntegrity(ctx, d.db); err != nil {
-		return err
-	}
 	ordered, err := embeddedMigrations()
 	if err != nil {
 		return err
@@ -152,30 +112,40 @@ func (d *DB) Migrate(ctx context.Context) error {
 		return errors.New("storage: no embedded migrations")
 	}
 
-	hasHistory, err := tableExists(ctx, d.db, "schema_migrations")
+	conn, err := d.db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("storage: acquire migration connection: %w", err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, migrationAdvisoryLockKey); err != nil {
+		return fmt.Errorf("storage: acquire migration lock: %w", err)
+	}
+	defer conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, migrationAdvisoryLockKey)
+
+	hasHistory, err := tableExists(ctx, conn, "schema_migrations")
 	if err != nil {
 		return fmt.Errorf("storage: inspect migration history: %w", err)
 	}
 	if !hasHistory {
-		userTables, err := userTableCount(ctx, d.db)
+		userTables, err := userTableCount(ctx, conn)
 		if err != nil {
 			return fmt.Errorf("storage: inspect existing schema: %w", err)
 		}
 		if userTables != 0 {
-			return fmt.Errorf("storage: database has %d table(s) but no migration history; refusing to reapply migrations", userTables)
+			return fmt.Errorf("storage: database schema has %d table(s) but no migration history; refusing to reapply migrations", userTables)
 		}
-		if _, err := d.db.ExecContext(ctx, `
+		if _, err := conn.ExecContext(ctx, `
 			CREATE TABLE schema_migrations (
 				version INTEGER PRIMARY KEY,
 				name TEXT NOT NULL,
-				applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+				applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 			)`,
 		); err != nil {
 			return fmt.Errorf("storage: create migration table: %w", err)
 		}
 	}
 
-	applied, err := readMigrationHistory(ctx, d.db)
+	applied, err := readMigrationHistory(ctx, conn)
 	if err != nil {
 		return err
 	}
@@ -191,7 +161,7 @@ func (d *DB) Migrate(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("storage: read migration %q: %w", migration.name, err)
 		}
-		tx, err := d.db.BeginTx(ctx, nil)
+		tx, err := conn.BeginTx(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("storage: begin migration %q: %w", migration.name, err)
 		}
@@ -200,7 +170,7 @@ func (d *DB) Migrate(ctx context.Context) error {
 			return fmt.Errorf("storage: apply migration %q: %w", migration.name, err)
 		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO schema_migrations (version, name) VALUES (?, ?)`, migration.version, migration.name,
+			`INSERT INTO schema_migrations (version, name) VALUES ($1, $2)`, migration.version, migration.name,
 		); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("storage: record migration %q: %w", migration.name, err)
@@ -209,7 +179,7 @@ func (d *DB) Migrate(ctx context.Context) error {
 			return fmt.Errorf("storage: commit migration %q: %w", migration.name, err)
 		}
 	}
-	if err := validateSchema(ctx, d.db); err != nil {
+	if err := validateSchema(ctx, conn); err != nil {
 		return fmt.Errorf("storage: migration validation: %w", err)
 	}
 	return nil
@@ -247,19 +217,30 @@ func embeddedMigrations() ([]migration, error) {
 func tableExists(ctx context.Context, queryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }, name string) (bool, error) {
-	var count int
-	err := queryer.QueryRowContext(ctx,
-		`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, name,
-	).Scan(&count)
-	return count != 0, err
+	var exists bool
+	err := queryer.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM pg_catalog.pg_class AS c
+			JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
+			WHERE n.nspname = current_schema()
+			  AND c.relname = $1
+			  AND c.relkind IN ('r', 'p')
+		)`, name,
+	).Scan(&exists)
+	return exists, err
 }
 
 func userTableCount(ctx context.Context, queryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }) (int, error) {
 	var count int
-	err := queryer.QueryRowContext(ctx,
-		`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`,
+	err := queryer.QueryRowContext(ctx, `
+		SELECT count(*)
+		FROM pg_catalog.pg_class AS c
+		JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
+		WHERE n.nspname = current_schema()
+		  AND c.relkind IN ('r', 'p')`,
 	).Scan(&count)
 	return count, err
 }
@@ -302,4 +283,9 @@ func validateMigrationHistory(applied map[int]string, ordered []migration) error
 		}
 	}
 	return nil
+}
+
+func postgresPlaceholder(args *[]any, value any) string {
+	*args = append(*args, value)
+	return "$" + strconv.Itoa(len(*args))
 }

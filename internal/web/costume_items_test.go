@@ -21,15 +21,7 @@ import (
 
 func costumeItemTestRepos(t *testing.T) (storage.ProductionRepository, storage.ActorRepository, storage.ItemTypeRepository, storage.CostumeItemRepository, context.Context) {
 	t.Helper()
-	db, err := storage.Open(filepath.Join(t.TempDir(), "costume-items.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	ctx := context.Background()
-	if err := db.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	db, ctx := openWebTestDB(t)
 	return storage.NewProductionRepository(db), storage.NewActorRepository(db), storage.NewItemTypeRepository(db), storage.NewCostumeItemRepository(db), ctx
 }
 
@@ -319,15 +311,7 @@ func TestCostumeItemCopyAndPasteUsesTypeAndDescriptionOnly(t *testing.T) {
 }
 
 func TestCostumeItemCreateAndDeleteRoutesPersistChanges(t *testing.T) {
-	db, err := storage.Open(filepath.Join(t.TempDir(), "costume-items-route.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	ctx := context.Background()
-	if err := db.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	db, ctx := openWebTestDB(t)
 	productions := storage.NewProductionRepository(db)
 	actors := storage.NewActorRepository(db)
 	types := storage.NewItemTypeRepository(db)

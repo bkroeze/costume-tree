@@ -1,21 +1,38 @@
 package config
 
 import (
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
 
 func TestLoadDefaultsAndOverrides(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
-		settings, err := Load(func(string) (string, bool) { return "", false })
+		settings, err := Load(postgresLookup(nil))
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
 		if settings.Address != ":8080" {
 			t.Errorf("Address = %q, want :8080", settings.Address)
 		}
-		if settings.DatabasePath != "/data/costume-tree.db" {
-			t.Errorf("DatabasePath = %q, want /data/costume-tree.db", settings.DatabasePath)
+		if settings.PGHost != "database.example" {
+			t.Errorf("PGHost = %q, want database.example", settings.PGHost)
+		}
+		if settings.PGPort != 5432 {
+			t.Errorf("PGPort = %d, want 5432", settings.PGPort)
+		}
+		if settings.PGUser != "costume-tree" {
+			t.Errorf("PGUser = %q, want costume-tree", settings.PGUser)
+		}
+		if settings.PGPassword != "secret" {
+			t.Errorf("PGPassword = %q, want secret", settings.PGPassword)
+		}
+		if settings.PGDatabase != "costume_tree" {
+			t.Errorf("PGDatabase = %q, want costume_tree", settings.PGDatabase)
+		}
+		if settings.PGSSLMode != "prefer" {
+			t.Errorf("PGSSLMode = %q, want prefer", settings.PGSSLMode)
 		}
 		if settings.CostumeTreeDir != "." {
 			t.Errorf("CostumeTreeDir = %q, want .", settings.CostumeTreeDir)
@@ -34,24 +51,29 @@ func TestLoadDefaultsAndOverrides(t *testing.T) {
 	t.Run("overrides", func(t *testing.T) {
 		values := map[string]string{
 			"COSTUME_TREE_ADDR":             "127.0.0.1:9090",
-			"COSTUME_TREE_DB_PATH":          "/data/test.db",
+			"PG_HOST":                       "2001:db8::1",
+			"PG_PORT":                       "6432",
+			"PG_USER":                       "wardrobe",
+			"PG_PASSWORD":                   "different-secret",
+			"PG_DATABASE":                   "wardrobe_test",
+			"PG_SSLMODE":                    "verify-full",
 			"COSTUMETREE_DIR":               "/srv/photos/../costume-tree/",
 			"COSTUME_TREE_SHUTDOWN_TIMEOUT": "3s",
 			"COSTUME_TREE_REQUEST_TIMEOUT":  "7s",
 			"COSTUME_TREE_MAX_BODY_BYTES":   "2048",
 		}
-		settings, err := Load(func(key string) (string, bool) {
-			value, ok := values[key]
-			return value, ok
-		})
+		settings, err := Load(postgresLookup(values))
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
 		if settings.Address != "127.0.0.1:9090" {
 			t.Errorf("Address = %q, want 127.0.0.1:9090", settings.Address)
 		}
-		if settings.DatabasePath != "/data/test.db" {
-			t.Errorf("DatabasePath = %q, want /data/test.db", settings.DatabasePath)
+		if settings.PGHost != "2001:db8::1" || settings.PGPort != 6432 {
+			t.Errorf("PostgreSQL address = %q:%d, want [2001:db8::1]:6432", settings.PGHost, settings.PGPort)
+		}
+		if settings.PGDatabase != "wardrobe_test" || settings.PGSSLMode != "verify-full" {
+			t.Errorf("PostgreSQL target = %q sslmode=%q, want wardrobe_test sslmode=verify-full", settings.PGDatabase, settings.PGSSLMode)
 		}
 		if settings.CostumeTreeDir != "/srv/costume-tree" {
 			t.Errorf("CostumeTreeDir = %q, want /srv/costume-tree", settings.CostumeTreeDir)
@@ -68,41 +90,81 @@ func TestLoadDefaultsAndOverrides(t *testing.T) {
 	})
 }
 
-func TestLoadRejectsDatabasePathOutsideData(t *testing.T) {
-	for _, path := range []string{"", "costume-tree.db", "/tmp/costume-tree.db", "/data/../tmp/db"} {
-		t.Run(path, func(t *testing.T) {
-			_, err := Load(func(key string) (string, bool) {
-				if key == "COSTUME_TREE_DB_PATH" {
-					return path, true
-				}
-				return "", false
-			})
-			if err == nil {
-				t.Fatalf("Load() with path %q returned nil error", path)
+func TestLoadRequiresPostgresCredentials(t *testing.T) {
+	for _, name := range []string{"PG_HOST", "PG_USER", "PG_PASSWORD"} {
+		t.Run(name+" missing", func(t *testing.T) {
+			values := requiredPostgresValues()
+			delete(values, name)
+			if _, err := Load(mapLookup(values)); err == nil {
+				t.Fatalf("Load() error = nil, want missing %s error", name)
+			}
+		})
+		t.Run(name+" empty", func(t *testing.T) {
+			values := requiredPostgresValues()
+			values[name] = ""
+			if _, err := Load(postgresLookup(values)); err == nil {
+				t.Fatalf("Load() error = nil, want empty %s error", name)
 			}
 		})
 	}
 }
 
+func TestLoadRejectsInvalidPostgresOptions(t *testing.T) {
+	for name, value := range map[string]string{
+		"PG_PORT":     "0",
+		"PG_DATABASE": "",
+		"PG_SSLMODE":  "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Load(postgresLookup(map[string]string{name: value})); err == nil {
+				t.Fatalf("Load() with %s=%q returned nil error", name, value)
+			}
+		})
+	}
+}
+
+func TestPostgresURLEscapesConnectionFields(t *testing.T) {
+	settings := Settings{
+		PGHost:     "2001:db8::1",
+		PGPort:     5432,
+		PGUser:     "wardrobe@example.com",
+		PGPassword: "s/ecret:@ word",
+		PGDatabase: "show/2026 wardrobe",
+		PGSSLMode:  "verify-full",
+	}
+
+	connectionString := settings.PostgresURL()
+	if strings.Contains(connectionString, settings.PGPassword) {
+		t.Fatalf("PostgresURL() = %q, contains unescaped password", connectionString)
+	}
+	parsed, err := url.Parse(connectionString)
+	if err != nil {
+		t.Fatalf("parse PostgresURL(): %v", err)
+	}
+	password, ok := parsed.User.Password()
+	if !ok || parsed.User.Username() != settings.PGUser || password != settings.PGPassword {
+		t.Errorf("PostgresURL() credentials did not round trip")
+	}
+	if parsed.Hostname() != settings.PGHost || parsed.Port() != "5432" {
+		t.Errorf("PostgresURL() host = %q, want [%s]:5432", parsed.Host, settings.PGHost)
+	}
+	if strings.TrimPrefix(parsed.Path, "/") != settings.PGDatabase {
+		t.Errorf("PostgresURL() database path = %q, want %q", parsed.Path, settings.PGDatabase)
+	}
+	if parsed.Query().Get("sslmode") != settings.PGSSLMode {
+		t.Errorf("PostgresURL() sslmode = %q, want %q", parsed.Query().Get("sslmode"), settings.PGSSLMode)
+	}
+}
+
 func TestLoadRejectsEmptyCostumeTreeDir(t *testing.T) {
-	_, err := Load(func(key string) (string, bool) {
-		if key == "COSTUMETREE_DIR" {
-			return "", true
-		}
-		return "", false
-	})
+	_, err := Load(postgresLookup(map[string]string{"COSTUMETREE_DIR": ""}))
 	if err == nil {
 		t.Fatal("Load() error = nil, want empty COSTUMETREE_DIR error")
 	}
 }
 
 func TestLoadRejectsInvalidShutdownTimeout(t *testing.T) {
-	_, err := Load(func(key string) (string, bool) {
-		if key == "COSTUME_TREE_SHUTDOWN_TIMEOUT" {
-			return "never", true
-		}
-		return "", false
-	})
+	_, err := Load(postgresLookup(map[string]string{"COSTUME_TREE_SHUTDOWN_TIMEOUT": "never"}))
 	if err == nil {
 		t.Fatal("Load() error = nil, want invalid duration error")
 	}
@@ -114,15 +176,36 @@ func TestLoadRejectsUnboundedHTTPSettings(t *testing.T) {
 		"COSTUME_TREE_MAX_BODY_BYTES":  "67108865",
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := Load(func(key string) (string, bool) {
-				if key == name {
-					return value, true
-				}
-				return "", false
-			})
+			_, err := Load(postgresLookup(map[string]string{name: value}))
 			if err == nil {
 				t.Fatalf("Load() with %s=%q returned nil error", name, value)
 			}
 		})
+	}
+}
+
+func postgresLookup(overrides map[string]string) func(string) (string, bool) {
+	values := requiredPostgresValues()
+	for key, value := range overrides {
+		values[key] = value
+	}
+	return func(key string) (string, bool) {
+		value, ok := values[key]
+		return value, ok
+	}
+}
+
+func mapLookup(values map[string]string) func(string) (string, bool) {
+	return func(key string) (string, bool) {
+		value, ok := values[key]
+		return value, ok
+	}
+}
+
+func requiredPostgresValues() map[string]string {
+	return map[string]string{
+		"PG_HOST":     "database.example",
+		"PG_USER":     "costume-tree",
+		"PG_PASSWORD": "secret",
 	}
 }

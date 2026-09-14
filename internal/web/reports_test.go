@@ -1,10 +1,8 @@
 package web
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,15 +10,7 @@ import (
 )
 
 func TestReportsHandlerDefaultsToFitAndRendersRichTextReport(t *testing.T) {
-	db, err := storage.Open(filepath.Join(t.TempDir(), "reports-web.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	ctx := context.Background()
-	if err := db.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	db, ctx := openWebTestDB(t)
 	productions := storage.NewProductionRepository(db)
 	actors := storage.NewActorRepository(db)
 	types := storage.NewItemTypeRepository(db)

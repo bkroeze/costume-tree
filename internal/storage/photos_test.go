@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"testing"
 )
 
@@ -215,23 +214,15 @@ func TestPhotoRepositoryValidatesMetadata(t *testing.T) {
 	if _, err := db.SQL().ExecContext(ctx,
 		`INSERT INTO costume_item_photos
 		 (production_id, costume_item_id, original_name, display_name, thumbnail_name, media_type, status)
-		 VALUES (?, ?, ?, ?, ?, ?, 'unknown')`,
+		 VALUES ($1, $2, $3, $4, $5, $6, 'unknown')`,
 		input.ProductionID, input.CostumeItemID, input.OriginalName, input.DisplayName, input.ThumbnailName, input.MediaType,
 	); err == nil {
 		t.Fatal("database accepted invalid photo status")
 	}
 }
 
-func TestPendingPhotosRecoverAfterDatabaseRestart(t *testing.T) {
-	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "photos.db")
-	db, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+func TestPendingPhotosRemainAfterRepeatedMigration(t *testing.T) {
+	db, ctx := openTestDB(t)
 	production, item := createPhotoTestItem(t, ctx, db, "Recovery")
 	photos := NewCostumeItemPhotoRepository(db)
 	first, err := photos.Create(ctx, validPhotoInput(production.ID, item.ID, "first"))
@@ -245,19 +236,10 @@ func TestPendingPhotosRecoverAfterDatabaseRestart(t *testing.T) {
 	if _, err := photos.MarkReady(ctx, second.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Close(); err != nil {
+	if err := db.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-
-	reopened, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer reopened.Close()
-	if err := reopened.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
-	pending, err := NewCostumeItemPhotoRepository(reopened).ListPending(ctx, 10)
+	pending, err := NewCostumeItemPhotoRepository(db).ListPending(ctx, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,13 +249,7 @@ func TestPendingPhotosRecoverAfterDatabaseRestart(t *testing.T) {
 }
 
 func TestPhotoMigrationUpgradesInitialSchemaAndIsValidated(t *testing.T) {
-	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "upgrade.db")
-	db, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, ctx := openTestSchema(t, false)
 	initial, err := migrations.ReadFile("migrations/0001_initial.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -281,7 +257,7 @@ func TestPhotoMigrationUpgradesInitialSchemaAndIsValidated(t *testing.T) {
 	if _, err := db.SQL().ExecContext(ctx, `CREATE TABLE schema_migrations (
 		version INTEGER PRIMARY KEY,
 		name TEXT NOT NULL,
-		applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+		applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 	)`); err != nil {
 		t.Fatal(err)
 	}
