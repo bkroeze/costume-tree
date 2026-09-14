@@ -454,7 +454,6 @@ ROLLBACK;
 \quit 4
 \endif
 
-\copy public.schema_migrations (version, name, applied_at) FROM '${CSV_FILES[0]}' WITH (FORMAT csv, NULL '$NULL_SENTINEL')
 \copy public.productions (id, name, archived_at, created_at, updated_at) FROM '${CSV_FILES[1]}' WITH (FORMAT csv, NULL '$NULL_SENTINEL')
 \copy public.actors (id, production_id, name, role, notes, archived_at, created_at, updated_at) FROM '${CSV_FILES[2]}' WITH (FORMAT csv, NULL '$NULL_SENTINEL')
 \copy public.item_types (id, production_id, name, archived_at, created_at, updated_at) FROM '${CSV_FILES[3]}' WITH (FORMAT csv, NULL '$NULL_SENTINEL')

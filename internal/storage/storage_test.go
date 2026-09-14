@@ -4,18 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"testing"
-	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
+	"costume-tree/internal/testdb"
 )
-
-var testSchemaSequence atomic.Uint64
 
 func openTestDB(t *testing.T) (*DB, context.Context) {
 	return openTestSchema(t, true)
@@ -23,45 +17,12 @@ func openTestDB(t *testing.T) (*DB, context.Context) {
 
 func openTestSchema(t *testing.T, migrate bool) (*DB, context.Context) {
 	t.Helper()
-	connectionString := os.Getenv("PG_TEST_URL")
-	if connectionString == "" {
-		t.Fatal("PG_TEST_URL must be set for database-backed storage tests")
-	}
-	ctx := context.Background()
-	admin, err := Open(connectionString)
-	if err != nil {
-		t.Fatalf("open PG_TEST_URL: %v", err)
-	}
-	schema := fmt.Sprintf(
-		"costume_tree_test_%d_%d_%d",
-		os.Getpid(), time.Now().UnixNano(), testSchemaSequence.Add(1),
-	)
-	if _, err := admin.SQL().ExecContext(ctx, `CREATE SCHEMA `+schema); err != nil {
-		_ = admin.Close()
-		t.Fatalf("create test schema: %v", err)
-	}
-
-	config, err := pgx.ParseConfig(connectionString)
-	if err != nil {
-		_, _ = admin.SQL().ExecContext(ctx, `DROP SCHEMA `+schema+` CASCADE`)
-		_ = admin.Close()
-		t.Fatalf("parse PG_TEST_URL: %v", err)
-	}
-	config.RuntimeParams["search_path"] = schema
-	isolatedConnectionString := stdlib.RegisterConnConfig(config)
+	isolatedConnectionString, ctx := testdb.OpenSchema(t)
 	db, err := Open(isolatedConnectionString)
 	if err != nil {
-		stdlib.UnregisterConnConfig(isolatedConnectionString)
-		_, _ = admin.SQL().ExecContext(ctx, `DROP SCHEMA `+schema+` CASCADE`)
-		_ = admin.Close()
 		t.Fatalf("open isolated test schema: %v", err)
 	}
-	t.Cleanup(func() {
-		_ = db.Close()
-		stdlib.UnregisterConnConfig(isolatedConnectionString)
-		_, _ = admin.SQL().ExecContext(context.Background(), `DROP SCHEMA `+schema+` CASCADE`)
-		_ = admin.Close()
-	})
+	t.Cleanup(func() { _ = db.Close() })
 	if migrate {
 		if err := db.Migrate(ctx); err != nil {
 			t.Fatalf("migrate database: %v", err)

@@ -162,7 +162,7 @@ The web layer owns HTTP and rendering. HTMX requests receive focused server-rend
 
 ## Verification
 
-Database-backed tests require `PG_TEST_URL` for a disposable PostgreSQL database. They create and remove isolated schemas in that database; never point this variable at production. Without it, the test run fails immediately.
+Database-backed tests require `PG_TEST_URL` for a disposable PostgreSQL cluster. They create and remove isolated schemas, a database, and a login role; use a dedicated local administrator and never point this variable at production. Without it, the test run fails immediately.
 
 ```sh
 PG_TEST_URL='postgres://costume_tree:password@127.0.0.1:5432/costume_tree_test?sslmode=disable' just check

@@ -42,12 +42,15 @@ type Settings struct {
 func (settings Settings) PostgresURL() string {
 	databasePath := "/" + settings.PGDatabase
 	return (&url.URL{
-		Scheme:   "postgres",
-		User:     url.UserPassword(settings.PGUser, settings.PGPassword),
-		Host:     net.JoinHostPort(settings.PGHost, strconv.FormatUint(uint64(settings.PGPort), 10)),
-		Path:     databasePath,
-		RawPath:  "/" + url.PathEscape(settings.PGDatabase),
-		RawQuery: url.Values{"sslmode": []string{settings.PGSSLMode}}.Encode(),
+		Scheme:  "postgres",
+		User:    url.UserPassword(settings.PGUser, settings.PGPassword),
+		Host:    net.JoinHostPort(settings.PGHost, strconv.FormatUint(uint64(settings.PGPort), 10)),
+		Path:    databasePath,
+		RawPath: "/" + url.PathEscape(settings.PGDatabase),
+		RawQuery: url.Values{
+			"search_path": []string{"public"},
+			"sslmode":     []string{settings.PGSSLMode},
+		}.Encode(),
 	}).String()
 }
 

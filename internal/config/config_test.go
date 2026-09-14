@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func TestLoadDefaultsAndOverrides(t *testing.T) {
@@ -153,6 +155,16 @@ func TestPostgresURLEscapesConnectionFields(t *testing.T) {
 	}
 	if parsed.Query().Get("sslmode") != settings.PGSSLMode {
 		t.Errorf("PostgresURL() sslmode = %q, want %q", parsed.Query().Get("sslmode"), settings.PGSSLMode)
+	}
+	if parsed.Query().Get("search_path") != "public" {
+		t.Errorf("PostgresURL() search_path = %q, want public", parsed.Query().Get("search_path"))
+	}
+	postgresConfig, err := pgx.ParseConfig(connectionString)
+	if err != nil {
+		t.Fatalf("pgx.ParseConfig(PostgresURL()): %v", err)
+	}
+	if postgresConfig.RuntimeParams["search_path"] != "public" {
+		t.Errorf("PostgresURL() pgx search_path = %q, want public", postgresConfig.RuntimeParams["search_path"])
 	}
 }
 
