@@ -264,22 +264,31 @@ psql_target_scalar() {
     printf '%s' "$output"
 }
 
-CAN_CREATE_DATABASE=$(psql_admin --command "
+TARGET_DATABASE_EXISTS=$(psql_admin --set=target_database="$PG_DATABASE" --command "
+SELECT CASE WHEN EXISTS (
+    SELECT 1 FROM pg_database WHERE datname = :'target_database'
+) THEN 1 ELSE 0 END;
+" 2>"$WORK_DIR/postgres-error.log") || die "cannot connect to the PostgreSQL admin database"
+[[ $TARGET_DATABASE_EXISTS =~ ^[01]$ ]] || die "PostgreSQL returned an invalid target database status"
+
+if [[ $TARGET_DATABASE_EXISTS == 0 ]]; then
+    CAN_CREATE_DATABASE=$(psql_admin --command "
 SELECT CASE WHEN rolsuper OR rolcreatedb THEN 1 ELSE 0 END
 FROM pg_roles
 WHERE rolname = current_user;
-" 2>"$WORK_DIR/postgres-error.log") || die "cannot connect to the PostgreSQL admin database"
-[[ $CAN_CREATE_DATABASE == 1 ]] || die "PG_USER must have CREATEDB-compatible privilege"
+" 2>"$WORK_DIR/postgres-error.log") || die "cannot inspect PostgreSQL database privileges"
+    [[ $CAN_CREATE_DATABASE == 1 ]] || die "PG_USER must have CREATEDB-compatible privilege when the target database does not exist"
 
-if ! psql_admin --set=target_database="$PG_DATABASE" >"$WORK_DIR/create-database.out" 2>"$WORK_DIR/postgres-error.log" <<'SQL'
+    if ! psql_admin --set=target_database="$PG_DATABASE" >"$WORK_DIR/create-database.out" 2>"$WORK_DIR/postgres-error.log" <<'SQL'
 SELECT format('CREATE DATABASE %I', :'target_database')
 WHERE NOT EXISTS (
     SELECT 1 FROM pg_database WHERE datname = :'target_database'
 )
 \gexec
 SQL
-then
-    die "cannot create or inspect the target PostgreSQL database"
+    then
+        die "cannot create the target PostgreSQL database"
+    fi
 fi
 
 TARGET_RELATION_COUNT=$(psql_target_scalar "
@@ -383,6 +392,8 @@ if [[ $MARKER_EXISTS == 1 ]]; then
     [[ $MARKER_ROWS == 1 ]] || die "target migration marker is malformed"
     STORED_SOURCE_SHA256=$(psql_target_scalar 'SELECT source_sha256 FROM public.sqlite_migration_source WHERE id = 1;') || die "target migration marker is unreadable"
     [[ $STORED_SOURCE_SHA256 == "$SOURCE_SHA256" ]] || die "target was loaded from a different SQLite source; refusing to replace it"
+    printf 'Migration already complete; source SHA-256 marker matches.\n'
+    exit 0
 else
     TARGET_DATA_ROWS=$(psql_target_scalar "
 SELECT (SELECT COUNT(*) FROM public.productions)
@@ -416,17 +427,13 @@ LOCK TABLE
     public.sqlite_migration_source
 IN ACCESS EXCLUSIVE MODE;
 
-SELECT (
-    (
-        (SELECT COUNT(*) FROM public.sqlite_migration_source) = 1
+SELECT
+    (SELECT COUNT(*) FROM public.sqlite_migration_source) = 1
         AND EXISTS (
             SELECT 1 FROM public.sqlite_migration_source
             WHERE id = 1 AND source_sha256 = '$SOURCE_SHA256'
-        )
-    )
-    OR
-    (
-        (SELECT COUNT(*) FROM public.sqlite_migration_source) = 0
+        ) AS migration_already_complete,
+    (SELECT COUNT(*) FROM public.sqlite_migration_source) = 0
         AND (
             (SELECT COUNT(*) FROM public.productions)
           + (SELECT COUNT(*) FROM public.actors)
@@ -434,23 +441,18 @@ SELECT (
           + (SELECT COUNT(*) FROM public.production_item_sequences)
           + (SELECT COUNT(*) FROM public.costume_items)
           + (SELECT COUNT(*) FROM public.costume_item_photos)
-        ) = 0
-    )
-) AS migration_target_safe
+        ) = 0 AS migration_target_empty
 \gset
-\if :migration_target_safe
+\if :migration_already_complete
+COMMIT;
+\echo migration_already_complete
+\quit 0
+\endif
+\if :migration_target_empty
 \else
 ROLLBACK;
 \quit 4
 \endif
-
-DELETE FROM public.costume_item_photos;
-DELETE FROM public.costume_items;
-DELETE FROM public.production_item_sequences;
-DELETE FROM public.actors;
-DELETE FROM public.item_types;
-DELETE FROM public.productions;
-DELETE FROM public.schema_migrations;
 
 \copy public.schema_migrations (version, name, applied_at) FROM '${CSV_FILES[0]}' WITH (FORMAT csv, NULL '$NULL_SENTINEL')
 \copy public.productions (id, name, archived_at, created_at, updated_at) FROM '${CSV_FILES[1]}' WITH (FORMAT csv, NULL '$NULL_SENTINEL')
@@ -501,6 +503,10 @@ SQL
 
 if ! psql_target --file "$LOAD_SQL" >"$WORK_DIR/load-target.out" 2>"$WORK_DIR/postgres-error.log"; then
     die "transactional PostgreSQL load failed; previous target data was retained"
+fi
+if [[ $(<"$WORK_DIR/load-target.out") == migration_already_complete ]]; then
+    printf 'Migration already complete; source SHA-256 marker matches.\n'
+    exit 0
 fi
 
 SOURCE_SHA256_AFTER_LOAD=$(checksum_file "$SOURCE_SQLITE") || die "cannot re-checksum source SQLite file after load"

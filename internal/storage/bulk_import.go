@@ -216,7 +216,7 @@ func (i *BulkImporter) Commit(ctx context.Context, preview BulkImportPreview) ([
 	defer tx.Rollback()
 	var productionName string
 	var archived sql.NullTime
-	if err := tx.QueryRowContext(ctx, `SELECT name, archived_at FROM productions WHERE id = $1`, preview.ProductionID).Scan(&productionName, &archived); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT name, archived_at FROM productions WHERE id = $1 FOR UPDATE`, preview.ProductionID).Scan(&productionName, &archived); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("%w: production", ErrBulkStalePreview)
 		}

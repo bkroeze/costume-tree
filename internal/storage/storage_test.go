@@ -25,7 +25,7 @@ func openTestSchema(t *testing.T, migrate bool) (*DB, context.Context) {
 	t.Helper()
 	connectionString := os.Getenv("PG_TEST_URL")
 	if connectionString == "" {
-		t.Skip("PG_TEST_URL is not set")
+		t.Fatal("PG_TEST_URL must be set for database-backed storage tests")
 	}
 	ctx := context.Background()
 	admin, err := Open(connectionString)
