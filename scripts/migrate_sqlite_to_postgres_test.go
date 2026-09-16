@@ -125,6 +125,20 @@ func TestSQLiteMigrationInitialLoadSafeRerunAndLeastPrivilege(t *testing.T) {
 	if err == nil || !strings.Contains(output, "target was loaded from a different SQLite source") {
 		t.Fatalf("different source result: err=%v\n%s", err, output)
 	}
+
+	if _, err := target.ExecContext(ctx, `DROP TABLE public.sqlite_migration_source`); err != nil {
+		t.Fatal(err)
+	}
+	output, err = runMigration(t, ctx, source, adminEnv)
+	if err == nil || !strings.Contains(output, "target contains data without a matching SQLite source marker") {
+		t.Fatalf("unmarked target result: err=%v\n%s", err, output)
+	}
+	if err := target.QueryRowContext(ctx, `SELECT count(*) FROM public.productions`).Scan(&productionCount); err != nil {
+		t.Fatal(err)
+	}
+	if productionCount != 2 {
+		t.Fatalf("unmarked target production count = %d, want 2", productionCount)
+	}
 }
 
 func runMigration(t *testing.T, ctx context.Context, source string, environment []string) (string, error) {
