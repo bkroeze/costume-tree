@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,22 +13,13 @@ import (
 	"costume-tree/internal/storage"
 )
 
-type contextCleanup func()
-
-func dashboardFixture(t *testing.T) (*DashboardHandler, storage.Production, storage.Actor, storage.CostumeItem, contextCleanup) {
+func dashboardFixture(t *testing.T) (*DashboardHandler, storage.Production, storage.Actor, storage.CostumeItem) {
 	t.Helper()
-	db, err := storage.Open(filepath.Join(t.TempDir(), "dashboard.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Migrate(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	db, ctx := openWebTestDB(t)
 	productions := storage.NewProductionRepository(db)
 	actors := storage.NewActorRepository(db)
 	types := storage.NewItemTypeRepository(db)
 	items := storage.NewCostumeItemRepository(db)
-	ctx := context.Background()
 	production, err := productions.Create(ctx, storage.CreateProductionInput{Name: "Macbeth"})
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +37,7 @@ func dashboardFixture(t *testing.T) (*DashboardHandler, storage.Production, stor
 		t.Fatal(err)
 	}
 	h := NewDashboardHandler(productions, actors, types, items, storage.NewDashboardQueries(db))
-	return h, production, actor, item, func() { _ = db.Close() }
+	return h, production, actor, item
 }
 
 func dashboardRequest(method, target string, values url.Values) *http.Request {
@@ -79,8 +69,7 @@ func assertWorkflowStatusOptions(t *testing.T, body string) {
 }
 
 func TestDashboardAndWorkspaceRenderActiveData(t *testing.T) {
-	h, production, actor, item, cleanup := dashboardFixture(t)
-	defer cleanup()
+	h, production, actor, item := dashboardFixture(t)
 	response := httptest.NewRecorder()
 	if err := h.Dashboard(response, httptest.NewRequest(http.MethodGet, "/production/"+strconv.FormatInt(production.ID, 10)+"/dashboard", nil)); err != nil {
 		t.Fatal(err)
@@ -153,8 +142,7 @@ func TestDashboardAndWorkspaceRenderActiveData(t *testing.T) {
 }
 
 func TestWorkspaceHTMXUpdateRendersInlineFeedback(t *testing.T) {
-	h, production, actor, item, cleanup := dashboardFixture(t)
-	defer cleanup()
+	h, production, actor, item := dashboardFixture(t)
 	path := "/production/" + strconv.FormatInt(production.ID, 10) + "/workspace/" + strconv.FormatInt(actor.ID, 10)
 	current := item.UpdatedAt.UTC().Format(time.RFC3339Nano)
 
@@ -210,8 +198,7 @@ func TestWorkspaceHTMXUpdateRendersInlineFeedback(t *testing.T) {
 }
 
 func TestWorkspaceRejectsStaleTimestampAndUpdatesStatus(t *testing.T) {
-	h, production, actor, item, cleanup := dashboardFixture(t)
-	defer cleanup()
+	h, production, actor, item := dashboardFixture(t)
 	path := "/production/" + strconv.FormatInt(production.ID, 10) + "/workspace/" + strconv.FormatInt(actor.ID, 10)
 	stale := dashboardRequest(http.MethodPost, path, url.Values{"item_id": {strconv.FormatInt(item.ID, 10)}, "updated_at": {"2000-01-01T00:00:00Z"}, "description": {"Changed description"}, "status": {storage.StatusAlterations}, "progress": {"10"}})
 	response := httptest.NewRecorder()
@@ -240,8 +227,7 @@ func TestWorkspaceRejectsStaleTimestampAndUpdatesStatus(t *testing.T) {
 }
 
 func TestWorkspaceStatusChangeAutomaticallySetsProgress(t *testing.T) {
-	h, production, actor, item, cleanup := dashboardFixture(t)
-	defer cleanup()
+	h, production, actor, item := dashboardFixture(t)
 	path := "/production/" + strconv.FormatInt(production.ID, 10) + "/workspace/" + strconv.FormatInt(actor.ID, 10)
 	request := dashboardRequest(http.MethodPost, path, url.Values{
 		"item_id":    {strconv.FormatInt(item.ID, 10)},
@@ -266,8 +252,7 @@ func TestWorkspaceStatusChangeAutomaticallySetsProgress(t *testing.T) {
 }
 
 func TestDashboardAndWorkspaceHTMXReturnFragments(t *testing.T) {
-	h, production, actor, _, cleanup := dashboardFixture(t)
-	defer cleanup()
+	h, production, actor, _ := dashboardFixture(t)
 	dashboard := httptest.NewRequest(http.MethodGet, "/production/"+strconv.FormatInt(production.ID, 10)+"/dashboard", nil)
 	dashboard.Header.Set("HX-Request", "true")
 	response := httptest.NewRecorder()

@@ -64,18 +64,18 @@ func (q *dashboardQueries) ProductionKPIs(ctx context.Context, productionID int6
 	const statement = `
 SELECT
   COUNT(ci.id),
-  COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
-  COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
-  COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
-  COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
-  COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
+  COALESCE(SUM(CASE WHEN ci.status = $1 THEN 1 ELSE 0 END), 0),
+  COALESCE(SUM(CASE WHEN ci.status = $2 THEN 1 ELSE 0 END), 0),
+  COALESCE(SUM(CASE WHEN ci.status = $3 THEN 1 ELSE 0 END), 0),
+  COALESCE(SUM(CASE WHEN ci.status = $4 THEN 1 ELSE 0 END), 0),
+  COALESCE(SUM(CASE WHEN ci.status = $5 THEN 1 ELSE 0 END), 0),
   COALESCE(SUM(CASE WHEN length(trim(ci.blocker)) > 0 THEN 1 ELSE 0 END), 0)
 FROM actors a
 LEFT JOIN costume_items ci
   ON ci.production_id = a.production_id
  AND ci.actor_id = a.id
  AND ci.archived_at IS NULL
-WHERE a.production_id = ?
+WHERE a.production_id = $6
   AND a.archived_at IS NULL`
 	var result ProductionKPIs
 	err := q.db.db.QueryRowContext(ctx, statement,
@@ -100,11 +100,11 @@ SELECT
   a.name,
   a.role,
   COUNT(ci.id),
-  COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
-  COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
-  COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
-  COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
-  COALESCE(SUM(CASE WHEN ci.status = ? THEN 1 ELSE 0 END), 0),
+  COALESCE(SUM(CASE WHEN ci.status = $1 THEN 1 ELSE 0 END), 0),
+  COALESCE(SUM(CASE WHEN ci.status = $2 THEN 1 ELSE 0 END), 0),
+  COALESCE(SUM(CASE WHEN ci.status = $3 THEN 1 ELSE 0 END), 0),
+  COALESCE(SUM(CASE WHEN ci.status = $4 THEN 1 ELSE 0 END), 0),
+  COALESCE(SUM(CASE WHEN ci.status = $5 THEN 1 ELSE 0 END), 0),
   COALESCE(SUM(CASE WHEN length(trim(ci.blocker)) > 0 THEN 1 ELSE 0 END), 0),
   AVG(ci.progress)
 FROM actors a
@@ -112,7 +112,7 @@ LEFT JOIN costume_items ci
   ON ci.production_id = a.production_id
  AND ci.actor_id = a.id
  AND ci.archived_at IS NULL
-WHERE a.production_id = ?
+WHERE a.production_id = $6
   AND a.archived_at IS NULL
 GROUP BY a.id, a.production_id, a.name, a.role
 ORDER BY lower(a.name), a.id`

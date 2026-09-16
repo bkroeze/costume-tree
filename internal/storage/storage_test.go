@@ -4,38 +4,38 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"sync"
 	"testing"
+
+	"costume-tree/internal/testdb"
 )
 
 func openTestDB(t *testing.T) (*DB, context.Context) {
+	return openTestSchema(t, true)
+}
+
+func openTestSchema(t *testing.T, migrate bool) (*DB, context.Context) {
 	t.Helper()
-	ctx := context.Background()
-	db, err := Open(filepath.Join(t.TempDir(), "costume-tree.db"))
+	isolatedConnectionString, ctx := testdb.OpenSchema(t)
+	db, err := Open(isolatedConnectionString, 4)
 	if err != nil {
-		t.Fatalf("open database: %v", err)
+		t.Fatalf("open isolated test schema: %v", err)
+	}
+	if got := db.SQL().Stats().MaxOpenConnections; got != 4 {
+		t.Fatalf("maximum open connections = %d, want 4", got)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	if err := db.Migrate(ctx); err != nil {
-		t.Fatalf("migrate database: %v", err)
+	if migrate {
+		if err := db.Migrate(ctx); err != nil {
+			t.Fatalf("migrate database: %v", err)
+		}
 	}
 	return db, ctx
 }
 
-func TestMigratePersistsSchemaAndRows(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "costume-tree.db")
-	ctx := context.Background()
-
-	db, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+func TestMigrateIsRepeatableAndPersistsRows(t *testing.T) {
+	db, ctx := openTestDB(t)
 	production, err := NewProductionRepository(db).Create(ctx, CreateProductionInput{Name: "Macbeth"})
 	if err != nil {
 		t.Fatal(err)
@@ -43,15 +43,6 @@ func TestMigratePersistsSchemaAndRows(t *testing.T) {
 	if production.CreatedAt.IsZero() || production.UpdatedAt.IsZero() {
 		t.Fatal("expected production timestamps")
 	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	db, err = Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
 	if err := db.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -85,15 +76,15 @@ func TestForeignKeysAndProgressConstraints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.SQL().ExecContext(ctx, `INSERT INTO costume_items (production_id, actor_id, item_type_id, code, progress) VALUES (?, ?, ?, 'C-9999', 101)`, production.ID, actor.ID, itemType.ID)
+	_, err = db.SQL().ExecContext(ctx, `INSERT INTO costume_items (production_id, actor_id, item_type_id, code, progress) VALUES ($1, $2, $3, 'C-9999', 101)`, production.ID, actor.ID, itemType.ID)
 	if err == nil {
 		t.Fatal("expected progress check failure")
 	}
-	_, err = db.SQL().ExecContext(ctx, `INSERT INTO costume_items (production_id, actor_id, item_type_id, code, status, progress) VALUES (?, ?, ?, 'C-9998', 'Complete', 99)`, production.ID, actor.ID, itemType.ID)
+	_, err = db.SQL().ExecContext(ctx, `INSERT INTO costume_items (production_id, actor_id, item_type_id, code, status, progress) VALUES ($1, $2, $3, 'C-9998', 'Complete', 99)`, production.ID, actor.ID, itemType.ID)
 	if err == nil {
 		t.Fatal("expected Complete progress check failure")
 	}
-	_, err = db.SQL().ExecContext(ctx, `INSERT INTO costume_items (production_id, actor_id, item_type_id, code, status, progress) VALUES (?, ?, ?, 'C-9997', 'Find', 0)`, production.ID, actor.ID+1000, itemType.ID)
+	_, err = db.SQL().ExecContext(ctx, `INSERT INTO costume_items (production_id, actor_id, item_type_id, code, status, progress) VALUES ($1, $2, $3, 'C-9997', 'Find', 0)`, production.ID, actor.ID+1000, itemType.ID)
 	if err == nil {
 		t.Fatal("expected actor foreign-key failure")
 	}
@@ -108,7 +99,7 @@ func TestForeignKeysAndProgressConstraints(t *testing.T) {
 	if item.Status != StatusFind {
 		t.Fatalf("default costume item status = %q, want %q", item.Status, StatusFind)
 	}
-	if _, err := db.SQL().ExecContext(ctx, `DELETE FROM actors WHERE id = ?`, actor.ID); err == nil {
+	if _, err := db.SQL().ExecContext(ctx, `DELETE FROM actors WHERE id = $1`, actor.ID); err == nil {
 		t.Fatal("expected referenced actor delete failure")
 	}
 }

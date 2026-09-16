@@ -45,11 +45,11 @@ func (r *itemTypeSummaryRepository) List(ctx context.Context, productionID int64
 			item_types.id,
 			item_types.name,
 			COUNT(*),
-			SUM(CASE WHEN costume_items.status = ? THEN 1 ELSE 0 END),
-			SUM(CASE WHEN costume_items.status = ? THEN 1 ELSE 0 END),
-			SUM(CASE WHEN costume_items.status = ? THEN 1 ELSE 0 END),
-			SUM(CASE WHEN costume_items.status = ? THEN 1 ELSE 0 END),
-			SUM(CASE WHEN costume_items.status = ? THEN 1 ELSE 0 END),
+			SUM(CASE WHEN costume_items.status = $1 THEN 1 ELSE 0 END),
+			SUM(CASE WHEN costume_items.status = $2 THEN 1 ELSE 0 END),
+			SUM(CASE WHEN costume_items.status = $3 THEN 1 ELSE 0 END),
+			SUM(CASE WHEN costume_items.status = $4 THEN 1 ELSE 0 END),
+			SUM(CASE WHEN costume_items.status = $5 THEN 1 ELSE 0 END),
 			SUM(CASE WHEN length(trim(costume_items.blocker)) > 0 THEN 1 ELSE 0 END)
 		FROM item_types
 		JOIN costume_items
@@ -58,7 +58,7 @@ func (r *itemTypeSummaryRepository) List(ctx context.Context, productionID int64
 		JOIN actors
 			ON actors.production_id = costume_items.production_id
 			AND actors.id = costume_items.actor_id
-		WHERE item_types.production_id = ?
+		WHERE item_types.production_id = $6
 			AND item_types.archived_at IS NULL
 			AND costume_items.archived_at IS NULL
 			AND actors.archived_at IS NULL

@@ -71,7 +71,7 @@ type BulkImportPreview struct {
 	Valid          bool
 }
 
-// BulkImporter performs import previews and commits against one SQLite DB.
+// BulkImporter performs import previews and commits against one PostgreSQL database.
 type BulkImporter struct {
 	db *DB
 
@@ -214,14 +214,15 @@ func (i *BulkImporter) Commit(ctx context.Context, preview BulkImportPreview) ([
 		return nil, err
 	}
 	defer tx.Rollback()
-	var productionName, archived string
-	if err := tx.QueryRowContext(ctx, `SELECT name, COALESCE(archived_at, '') FROM productions WHERE id = ?`, preview.ProductionID).Scan(&productionName, &archived); err != nil {
+	var productionName string
+	var archived sql.NullTime
+	if err := tx.QueryRowContext(ctx, `SELECT name, archived_at FROM productions WHERE id = $1 FOR UPDATE`, preview.ProductionID).Scan(&productionName, &archived); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("%w: production", ErrBulkStalePreview)
 		}
 		return nil, fmt.Errorf("storage: validate bulk production: %w", err)
 	}
-	if archived != "" || !strings.EqualFold(strings.TrimSpace(productionName), strings.TrimSpace(preview.ProductionName)) {
+	if archived.Valid || !strings.EqualFold(strings.TrimSpace(productionName), strings.TrimSpace(preview.ProductionName)) {
 		return nil, ErrBulkStalePreview
 	}
 
@@ -278,15 +279,11 @@ func (i *BulkImporter) Commit(ctx context.Context, preview BulkImportPreview) ([
 		if allocErr != nil {
 			return nil, allocErr
 		}
-		insert, insertErr := tx.ExecContext(ctx, `INSERT INTO costume_items (production_id, actor_id, item_type_id, code) VALUES (?, ?, ?, ?)`, preview.ProductionID, actor.ID, typ.ID, code)
-		if insertErr != nil {
+		var id int64
+		if insertErr := tx.QueryRowContext(ctx, `INSERT INTO costume_items (production_id, actor_id, item_type_id, code) VALUES ($1, $2, $3, $4) RETURNING id`, preview.ProductionID, actor.ID, typ.ID, code).Scan(&id); insertErr != nil {
 			return nil, fmt.Errorf("storage: bulk create costume item: %w", insertErr)
 		}
-		id, idErr := insert.LastInsertId()
-		if idErr != nil {
-			return nil, fmt.Errorf("storage: bulk create costume item id: %w", idErr)
-		}
-		item, scanErr := scanCostumeItem(tx.QueryRowContext(ctx, `SELECT `+costumeItemColumns+` FROM costume_items WHERE production_id = ? AND id = ?`, preview.ProductionID, id))
+		item, scanErr := scanCostumeItem(tx.QueryRowContext(ctx, `SELECT `+costumeItemColumns+` FROM costume_items WHERE production_id = $1 AND id = $2`, preview.ProductionID, id))
 		if scanErr != nil {
 			return nil, fmt.Errorf("storage: bulk read costume item: %w", scanErr)
 		}
@@ -307,14 +304,15 @@ func (i *BulkImporter) CommitImport(ctx context.Context, preview BulkImportPrevi
 }
 
 func (i *BulkImporter) scope(ctx context.Context, productionID int64) (string, []Actor, []ItemType, error) {
-	var productionName, archived string
-	if err := i.db.db.QueryRowContext(ctx, `SELECT name, COALESCE(archived_at, '') FROM productions WHERE id = ?`, productionID).Scan(&productionName, &archived); err != nil {
+	var productionName string
+	var archived sql.NullTime
+	if err := i.db.db.QueryRowContext(ctx, `SELECT name, archived_at FROM productions WHERE id = $1`, productionID).Scan(&productionName, &archived); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", nil, nil, notFound("production")
 		}
 		return "", nil, nil, fmt.Errorf("storage: get bulk production: %w", err)
 	}
-	if archived != "" {
+	if archived.Valid {
 		return "", nil, nil, ErrArchived
 	}
 	actors, err := listBulkActors(ctx, i.db.db, productionID)
@@ -345,7 +343,7 @@ type bulkQuery interface {
 }
 
 func listBulkActors(ctx context.Context, query bulkQuery, productionID int64) ([]Actor, error) {
-	rows, err := query.QueryContext(ctx, `SELECT `+actorColumns+` FROM actors WHERE production_id = ? AND archived_at IS NULL ORDER BY id`, productionID)
+	rows, err := query.QueryContext(ctx, `SELECT `+actorColumns+` FROM actors WHERE production_id = $1 AND archived_at IS NULL ORDER BY id`, productionID)
 	if err != nil {
 		return nil, fmt.Errorf("storage: list bulk actors: %w", err)
 	}
@@ -365,7 +363,7 @@ func listBulkActors(ctx context.Context, query bulkQuery, productionID int64) ([
 }
 
 func listBulkItemTypes(ctx context.Context, query bulkQuery, productionID int64) ([]ItemType, error) {
-	rows, err := query.QueryContext(ctx, `SELECT `+itemTypeColumns+` FROM item_types WHERE production_id = ? AND archived_at IS NULL ORDER BY id`, productionID)
+	rows, err := query.QueryContext(ctx, `SELECT `+itemTypeColumns+` FROM item_types WHERE production_id = $1 AND archived_at IS NULL ORDER BY id`, productionID)
 	if err != nil {
 		return nil, fmt.Errorf("storage: list bulk item types: %w", err)
 	}
@@ -385,15 +383,11 @@ func listBulkItemTypes(ctx context.Context, query bulkQuery, productionID int64)
 }
 
 func insertBulkActor(ctx context.Context, tx *sql.Tx, productionID int64, name string) (Actor, error) {
-	result, err := tx.ExecContext(ctx, `INSERT INTO actors (production_id, name) VALUES (?, ?)`, productionID, name)
-	if err != nil {
+	var id int64
+	if err := tx.QueryRowContext(ctx, `INSERT INTO actors (production_id, name) VALUES ($1, $2) RETURNING id`, productionID, name).Scan(&id); err != nil {
 		return Actor{}, fmt.Errorf("storage: bulk create actor: %w", err)
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return Actor{}, fmt.Errorf("storage: bulk create actor id: %w", err)
-	}
-	actor, err := scanActor(tx.QueryRowContext(ctx, `SELECT `+actorColumns+` FROM actors WHERE production_id = ? AND id = ?`, productionID, id))
+	actor, err := scanActor(tx.QueryRowContext(ctx, `SELECT `+actorColumns+` FROM actors WHERE production_id = $1 AND id = $2`, productionID, id))
 	if err != nil {
 		return Actor{}, fmt.Errorf("storage: bulk read actor: %w", err)
 	}
@@ -401,15 +395,11 @@ func insertBulkActor(ctx context.Context, tx *sql.Tx, productionID int64, name s
 }
 
 func insertBulkItemType(ctx context.Context, tx *sql.Tx, productionID int64, name string) (ItemType, error) {
-	result, err := tx.ExecContext(ctx, `INSERT INTO item_types (production_id, name) VALUES (?, ?)`, productionID, name)
-	if err != nil {
+	var id int64
+	if err := tx.QueryRowContext(ctx, `INSERT INTO item_types (production_id, name) VALUES ($1, $2) RETURNING id`, productionID, name).Scan(&id); err != nil {
 		return ItemType{}, fmt.Errorf("storage: bulk create item type: %w", err)
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return ItemType{}, fmt.Errorf("storage: bulk create item type id: %w", err)
-	}
-	typ, err := scanItemType(tx.QueryRowContext(ctx, `SELECT `+itemTypeColumns+` FROM item_types WHERE production_id = ? AND id = ?`, productionID, id))
+	typ, err := scanItemType(tx.QueryRowContext(ctx, `SELECT `+itemTypeColumns+` FROM item_types WHERE production_id = $1 AND id = $2`, productionID, id))
 	if err != nil {
 		return ItemType{}, fmt.Errorf("storage: bulk read item type: %w", err)
 	}

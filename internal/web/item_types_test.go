@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -15,15 +14,7 @@ import (
 
 func itemTypeTestRepos(t *testing.T) (storage.ProductionRepository, storage.ItemTypeRepository, context.Context) {
 	t.Helper()
-	db, err := storage.Open(filepath.Join(t.TempDir(), "item-types.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	ctx := context.Background()
-	if err := db.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	db, ctx := openWebTestDB(t)
 	return storage.NewProductionRepository(db), storage.NewItemTypeRepository(db), ctx
 }
 

@@ -1,21 +1,21 @@
 // Package config loads process settings from the environment.
-// COSTUME_TREE_ADDR defaults to :8080, COSTUME_TREE_DB_PATH defaults to
-// /data/costume-tree.db, COSTUMETREE_DIR defaults to ., COSTUME_TREE_SHUTDOWN_TIMEOUT
-// defaults to 10s, COSTUME_TREE_REQUEST_TIMEOUT defaults to 30s, and
-// COSTUME_TREE_MAX_BODY_BYTES defaults to 24 MiB.
 package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 )
 
 const (
 	defaultAddress         = ":8080"
-	defaultDatabasePath    = "/data/costume-tree.db"
+	defaultPGPort          = 5432
+	defaultPGDatabase      = "costume_tree"
+	defaultPGSSLMode       = "prefer"
+	defaultDBMaxOpenConns  = 20
 	defaultCostumeTreeDir  = "."
 	defaultShutdownTimeout = 10 * time.Second
 	defaultRequestTimeout  = 30 * time.Second
@@ -26,18 +26,44 @@ const (
 // Settings contains configuration required by the application shell.
 type Settings struct {
 	Address         string
-	DatabasePath    string
+	PGHost          string
+	PGPort          uint16
+	PGUser          string
+	PGPassword      string
+	PGDatabase      string
+	PGSSLMode       string
+	DBMaxOpenConns  int
 	CostumeTreeDir  string
 	ShutdownTimeout time.Duration
 	RequestTimeout  time.Duration
 	MaxBodyBytes    int64
 }
 
+// PostgresURL returns the PostgreSQL connection URL without exposing it through
+// logging or other side effects.
+func (settings Settings) PostgresURL() string {
+	databasePath := "/" + settings.PGDatabase
+	return (&url.URL{
+		Scheme:  "postgres",
+		User:    url.UserPassword(settings.PGUser, settings.PGPassword),
+		Host:    net.JoinHostPort(settings.PGHost, strconv.FormatUint(uint64(settings.PGPort), 10)),
+		Path:    databasePath,
+		RawPath: "/" + url.PathEscape(settings.PGDatabase),
+		RawQuery: url.Values{
+			"search_path": []string{"public"},
+			"sslmode":     []string{settings.PGSSLMode},
+		}.Encode(),
+	}).String()
+}
+
 // Load reads and validates settings through lookup.
 func Load(lookup func(string) (string, bool)) (Settings, error) {
 	settings := Settings{
 		Address:         defaultAddress,
-		DatabasePath:    defaultDatabasePath,
+		PGPort:          defaultPGPort,
+		PGDatabase:      defaultPGDatabase,
+		PGSSLMode:       defaultPGSSLMode,
+		DBMaxOpenConns:  defaultDBMaxOpenConns,
 		CostumeTreeDir:  defaultCostumeTreeDir,
 		ShutdownTimeout: defaultShutdownTimeout,
 		RequestTimeout:  defaultRequestTimeout,
@@ -51,11 +77,46 @@ func Load(lookup func(string) (string, bool)) (Settings, error) {
 		settings.Address = value
 	}
 
-	if value, ok := lookup("COSTUME_TREE_DB_PATH"); ok {
-		settings.DatabasePath = value
+	for _, required := range []struct {
+		name        string
+		destination *string
+	}{
+		{name: "PG_HOST", destination: &settings.PGHost},
+		{name: "PG_USER", destination: &settings.PGUser},
+		{name: "PG_PASSWORD", destination: &settings.PGPassword},
+	} {
+		value, ok := lookup(required.name)
+		if !ok || value == "" {
+			return Settings{}, fmt.Errorf("config: %s is required and must not be empty", required.name)
+		}
+		*required.destination = value
 	}
-	if err := validateDatabasePath(settings.DatabasePath); err != nil {
-		return Settings{}, err
+
+	if value, ok := lookup("PG_PORT"); ok {
+		port, err := strconv.ParseUint(value, 10, 16)
+		if err != nil || port == 0 {
+			return Settings{}, fmt.Errorf("config: PG_PORT must be an integer between 1 and 65535")
+		}
+		settings.PGPort = uint16(port)
+	}
+	if value, ok := lookup("PG_DATABASE"); ok {
+		if value == "" {
+			return Settings{}, fmt.Errorf("config: PG_DATABASE must not be empty")
+		}
+		settings.PGDatabase = value
+	}
+	if value, ok := lookup("PG_SSLMODE"); ok {
+		if value == "" {
+			return Settings{}, fmt.Errorf("config: PG_SSLMODE must not be empty")
+		}
+		settings.PGSSLMode = value
+	}
+	if value, ok := lookup("DB_MAX_OPEN_CONNS"); ok {
+		maxOpenConns, err := strconv.Atoi(value)
+		if err != nil || maxOpenConns <= 0 {
+			return Settings{}, fmt.Errorf("config: DB_MAX_OPEN_CONNS must be a positive integer")
+		}
+		settings.DBMaxOpenConns = maxOpenConns
 	}
 
 	if value, ok := lookup("COSTUMETREE_DIR"); ok {
@@ -102,18 +163,4 @@ func parsePositiveDuration(name, value string) (time.Duration, error) {
 		return 0, fmt.Errorf("config: %s must be positive", name)
 	}
 	return timeout, nil
-}
-
-func validateDatabasePath(path string) error {
-	if path == "" {
-		return fmt.Errorf("config: COSTUME_TREE_DB_PATH must not be empty")
-	}
-	clean := filepath.Clean(path)
-	if !filepath.IsAbs(path) || (clean != "/data" && !strings.HasPrefix(clean, "/data/")) {
-		return fmt.Errorf("config: COSTUME_TREE_DB_PATH must be under /data")
-	}
-	if clean == "/data" {
-		return fmt.Errorf("config: COSTUME_TREE_DB_PATH must name a file under /data")
-	}
-	return nil
 }

@@ -60,7 +60,7 @@ func (r *reportRepository) Generate(ctx context.Context, filter ReportFilter) (F
 	statusClause := ""
 	statusArgs := []any{filter.ProductionID}
 	if status := strings.TrimSpace(filter.Status); status != "" {
-		statusClause = " AND costume_items.status = ?"
+		statusClause = " AND costume_items.status = $2"
 		statusArgs = append(statusArgs, status)
 	}
 
@@ -73,7 +73,7 @@ func (r *reportRepository) Generate(ctx context.Context, filter ReportFilter) (F
 		JOIN actors
 			ON actors.production_id = costume_items.production_id
 			AND actors.id = costume_items.actor_id
-		WHERE item_types.production_id = ?
+		WHERE item_types.production_id = $1
 			AND item_types.archived_at IS NULL
 			AND costume_items.archived_at IS NULL
 			AND actors.archived_at IS NULL`+statusClause+`
@@ -109,7 +109,7 @@ func (r *reportRepository) Generate(ctx context.Context, filter ReportFilter) (F
 		JOIN actors
 			ON actors.production_id = costume_items.production_id
 			AND actors.id = costume_items.actor_id
-		WHERE costume_items.production_id = ?
+		WHERE costume_items.production_id = $1
 			AND costume_items.archived_at IS NULL
 			AND item_types.archived_at IS NULL
 			AND actors.archived_at IS NULL

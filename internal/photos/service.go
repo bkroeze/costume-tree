@@ -487,14 +487,14 @@ func (s *Service) process(photo storage.CostumeItemPhoto) bool {
 		if len(message) > 500 {
 			message = message[:500]
 		}
-		if _, markErr := s.repository.MarkFailed(context.Background(), photo.ID, message); markErr != nil {
+		if _, markErr := s.repository.MarkFailed(s.ctx, photo.ID, message); markErr != nil {
 			s.logger.Error("mark photo processing failed", "photo_id", photo.ID, "error", markErr)
 			return false
 		}
 		s.logger.Warn("photo processing failed", "photo_id", photo.ID, "error", err)
 		return true
 	}
-	if _, err := s.repository.MarkReady(context.Background(), photo.ID); err != nil {
+	if _, err := s.repository.MarkReady(s.ctx, photo.ID); err != nil {
 		s.logger.Error("mark photo ready", "photo_id", photo.ID, "error", err)
 		return false
 	}

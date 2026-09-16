@@ -99,7 +99,7 @@ func (q *ItemSearch) Search(ctx context.Context, filter ItemSearchFilter) ([]Ite
 		FROM costume_items AS ci
 		JOIN actors AS a ON a.production_id = ci.production_id AND a.id = ci.actor_id
 		JOIN item_types AS it ON it.production_id = ci.production_id AND it.id = ci.item_type_id
-		WHERE ci.production_id = ?`
+		WHERE ci.production_id = $1`
 	args := []any{filter.ProductionID}
 	if !filter.IncludeArchived {
 		query += ` AND ci.archived_at IS NULL AND a.archived_at IS NULL`
@@ -107,41 +107,34 @@ func (q *ItemSearch) Search(ctx context.Context, filter ItemSearchFilter) ([]Ite
 	if code := normalizeSearchCode(filter.Code); code != "" {
 		// Codes allocated by the repository are canonical uppercase values. The
 		// input normalization keeps this equality predicate index-friendly.
-		query += ` AND ci.code = ?`
-		args = append(args, code)
+		query += ` AND ci.code = ` + postgresPlaceholder(&args, code)
 	}
 	if filter.ActorID > 0 {
-		query += ` AND ci.actor_id = ?`
-		args = append(args, filter.ActorID)
+		query += ` AND ci.actor_id = ` + postgresPlaceholder(&args, filter.ActorID)
 	}
 	if filter.ItemTypeID > 0 {
-		query += ` AND ci.item_type_id = ?`
-		args = append(args, filter.ItemTypeID)
+		query += ` AND ci.item_type_id = ` + postgresPlaceholder(&args, filter.ItemTypeID)
 	}
 	if status := strings.TrimSpace(filter.Status); status != "" {
-		query += ` AND ci.status = ?`
-		args = append(args, status)
+		query += ` AND ci.status = ` + postgresPlaceholder(&args, status)
 	}
 	if filter.Blocked {
 		query += ` AND length(trim(ci.blocker)) > 0`
 	}
 	if filter.Incomplete {
-		query += ` AND ci.status <> ?`
-		args = append(args, StatusComplete)
+		query += ` AND ci.status <> ` + postgresPlaceholder(&args, StatusComplete)
 	}
 	if filter.MinProgress != nil {
-		query += ` AND ci.progress >= ?`
-		args = append(args, *filter.MinProgress)
+		query += ` AND ci.progress >= ` + postgresPlaceholder(&args, *filter.MinProgress)
 	}
 	if filter.MaxProgress != nil {
-		query += ` AND ci.progress <= ?`
-		args = append(args, *filter.MaxProgress)
+		query += ` AND ci.progress <= ` + postgresPlaceholder(&args, *filter.MaxProgress)
 	}
 	if text := strings.ToLower(strings.TrimSpace(filter.Text)); text != "" {
-		// instr() makes search literal and predictable: wildcard characters in
+		// strpos() makes search literal and predictable: wildcard characters in
 		// user text are not interpreted as SQL patterns.
-		query += ` AND (instr(lower(a.name), ?) > 0 OR instr(lower(a.role), ?) > 0 OR instr(lower(it.name), ?) > 0 OR instr(lower(ci.description), ?) > 0)`
-		args = append(args, text, text, text, text)
+		placeholder := postgresPlaceholder(&args, text)
+		query += ` AND (strpos(lower(a.name), ` + placeholder + `) > 0 OR strpos(lower(a.role), ` + placeholder + `) > 0 OR strpos(lower(it.name), ` + placeholder + `) > 0 OR strpos(lower(ci.description), ` + placeholder + `) > 0)`
 	}
 	query += ` ORDER BY CASE ci.status
 		WHEN 'Find' THEN 1
@@ -150,8 +143,7 @@ func (q *ItemSearch) Search(ctx context.Context, filter ItemSearchFilter) ([]Ite
 		WHEN 'Alterations' THEN 4
 		WHEN 'Complete' THEN 5
 		ELSE 6
-	END, ci.id LIMIT ? OFFSET ?`
-	args = append(args, limit, offset)
+	END, ci.id LIMIT ` + postgresPlaceholder(&args, limit) + ` OFFSET ` + postgresPlaceholder(&args, offset)
 
 	rows, err := q.db.db.QueryContext(ctx, query, args...)
 	if err != nil {

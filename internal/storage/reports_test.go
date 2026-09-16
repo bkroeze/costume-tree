@@ -1,21 +1,9 @@
 package storage
 
-import (
-	"context"
-	"path/filepath"
-	"testing"
-)
+import "testing"
 
 func TestReportRepositoryFiltersStatusesAndListsAccessories(t *testing.T) {
-	db, err := Open(filepath.Join(t.TempDir(), "reports.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	ctx := context.Background()
-	if err := db.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	db, ctx := openTestDB(t)
 	productions := NewProductionRepository(db)
 	actors := NewActorRepository(db)
 	types := NewItemTypeRepository(db)

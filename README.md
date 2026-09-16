@@ -1,21 +1,56 @@
 # Costume Tree
 
-Costume Tree is a single-container costume inventory application. It stores productions, actors, reusable item types, and physical costume pieces in SQLite. The home page lists active productions with links to each production's dashboard and actor roster. Each physical piece receives an immutable production-scoped code such as `C-0001`.
+Costume Tree is a costume inventory application backed by PostgreSQL. It stores productions, actors, reusable item types, and physical costume pieces. The home page lists active productions with links to each production's dashboard and actor roster. Each physical piece receives an immutable production-scoped code such as `C-0001`.
 
 ## Prerequisites
 
 - Go 1.27 or newer for host development
-- Docker with BuildKit for the OCI image
+- Access to an external PostgreSQL 17 or newer server plus matching `psql`, `pg_dump`, and `pg_restore` client tools
+- Docker with BuildKit and Docker Compose for the application container
 
-The application serves on port `8080`, stores its database under `/data`, and stores uploaded photo originals and derivatives under `/photos` in the container.
+The application serves on port `8080`. PostgreSQL owns the structured data, while uploaded photo originals and derivatives are stored separately under `COSTUMETREE_DIR`.
+
+## Configuration
+
+Create a gitignored `.env` in the repository root for local commands and Compose:
+
+```dotenv
+PG_HOST=database.example.com
+PG_PORT=5432
+PG_USER=costume_tree
+PG_PASSWORD=replace-with-a-long-random-password
+PG_DATABASE=costume_tree
+PG_SSLMODE=disable
+DB_MAX_OPEN_CONNS=20
+COSTUMETREE_DIR=./costume-tree-photos
+PORT=8080
+APP_UID=1000
+APP_GID=1000
+```
+
+`PG_HOST`, `PG_USER`, and `PG_PASSWORD` are mandatory. `PG_PORT` defaults to `5432`, `PG_DATABASE` defaults to `costume_tree`, `PG_SSLMODE` defaults to `prefer`, and `DB_MAX_OPEN_CONNS` defaults to `20`. Use an SSL mode appropriate for the database provider; hosted production databases should normally use `verify-full` with trusted certificates. Credentials and database names are URL-escaped when the application constructs its connection string, and the connection string is not logged.
+
+The remaining application settings are optional:
+
+- `COSTUME_TREE_ADDR=:8080`
+- `COSTUMETREE_DIR=.`
+- `COSTUME_TREE_SHUTDOWN_TIMEOUT=10s`
+- `COSTUME_TREE_REQUEST_TIMEOUT=30s`
+- `COSTUME_TREE_MAX_BODY_BYTES=25165824`
+
+`COSTUMETREE_DIR` may be relative or absolute. For Compose it names an existing host directory; the container uses `/photos` internally. `APP_UID` and `APP_GID` default to `1000` and should match the owner of that host directory. The 24 MiB request limit accommodates the 20 MiB photo limit plus multipart overhead; it may be increased up to 64 MiB.
+
+`just` loads `.env` for local commands. Compose passes the same file into the application container. `PG_HOST` must resolve and be reachable from inside that container; do not use `127.0.0.1` unless PostgreSQL actually runs in the same container network namespace.
 
 ## Local development
 
+Ensure the configured external PostgreSQL server is reachable, then run the application from the host:
+
 ```sh
-go test ./...
-go vet ./...
-go run ./cmd/costume-tree
+just run
 ```
+
+The process applies embedded PostgreSQL migrations transactionally before accepting traffic. SIGINT and SIGTERM stop the HTTP server within the configured shutdown timeout.
 
 ## Justfile shortcuts
 
@@ -26,8 +61,13 @@ just --list
 just check
 just image
 just docker-push
-just compose-start
+just start
+just health
+just logs
+just psql
 ```
+
+`just up` runs the application container in the foreground. `just start` starts it in the background, and `just stop` removes it. These commands never start, stop, or delete the external PostgreSQL server. The host photo directory is never removed by these recipes.
 
 The production dashboard links to **Reports**, where a status-filtered category count can be previewed in a modal and copied as rich text for email.
 
@@ -37,134 +77,96 @@ The production dashboard links to **Reports**, where a status-filtered category 
 IMAGE_REPOSITORY=ghcr.io/bkroeze/costume-tree IMAGE_TAG=latest just docker-push
 ```
 
-Override the registry path or tag when needed.
-
-Container management uses `IMAGE`, `CONTAINER`, `VOLUME`, `PHOTO_VOLUME`, and `PORT` environment overrides:
-
-```sh
-IMAGE=costume-tree:dev CONTAINER=costume-tree VOLUME=costume-tree-data PHOTO_VOLUME=costume-tree-photos PORT=8080 just start
-PORT=8080 just health
-CONTAINER=costume-tree just logs
-CONTAINER=costume-tree just backup costume-tree-backup.db
-just restore backups/costume-tree-backup.db restored.db costume-tree-restore
-CONTAINER=costume-tree VOLUME=costume-tree-data PHOTO_VOLUME=costume-tree-photos just stop
-```
-
-`just restore` stages a host-owned backup with a short-lived helper, then runs the application’s validated cold-restore command into a new volume.
-
-## Configuration
-
-The default local process expects `/data` to exist and uses:
-
-- `COSTUME_TREE_ADDR=:8080`
-- `COSTUME_TREE_DB_PATH=/data/costume-tree.db`
-- `COSTUMETREE_DIR=.`
-- `COSTUME_TREE_SHUTDOWN_TIMEOUT=10s`
-- `COSTUME_TREE_REQUEST_TIMEOUT=30s`
-- `COSTUME_TREE_MAX_BODY_BYTES=25165824`
-
-`COSTUME_TREE_DB_PATH` must name a file under `/data`. `COSTUMETREE_DIR` must not be empty; it may be relative or absolute and is cleaned before use. The 24 MiB request limit accommodates the 20 MiB photo limit plus multipart overhead; it may be increased up to 64 MiB.
-
 ## Compose
 
-The Compose service builds the current Dockerfile, publishes container port `8080` through `PORT` (default `8080`), reuses the named `costume-tree-data` volume at `/data`, and binds `${COSTUMETREE_DIR:-./costume-tree-photos}` to `/photos`. The application receives `COSTUMETREE_DIR=/photos`.
+The Compose stack contains only the application. It passes the gitignored `.env` into the container and connects directly to the external PostgreSQL server named by `PG_HOST`. No PostgreSQL server, database volume, or database lifecycle is managed by this repository.
 
-The image runs as UID/GID `65532:65532`, so prepare a writable host photo directory before first use:
-
-```sh
-sudo install -d -o 65532 -g 65532 costume-tree-photos
-just compose-start
-just compose-logs
-just compose-stop
-```
-
-Set a different host directory or published port when starting the service:
+Photos use an existing host bind mount. Compose runs the application as `APP_UID:APP_GID`—`1000:1000` by default—to match the directory owner, and deliberately refuses to auto-create a root-owned source directory. Prepare it as the deployment user before first start:
 
 ```sh
-COSTUMETREE_DIR=/srv/costume-tree/photos PORT=8081 just compose-start
+mkdir -p costume-tree-photos
+chmod 700 costume-tree-photos
+just start
+just health
 ```
 
-`just compose-stop` leaves the database volume intact.
+Set a different host photo directory, host UID/GID, or published application port in `.env`:
 
-## Container
-
-Build and run with a persistent volume:
-
-```sh
-docker build -t costume-tree:dev .
-docker volume create costume-tree-data
-docker run --rm --name costume-tree \
-  -p 8080:8080 \
-  -v costume-tree-data:/data \
-  -e COSTUMETREE_DIR=/photos \
-  -v "$(pwd)/costume-tree-photos:/photos" \
-  costume-tree:dev
+```dotenv
+COSTUMETREE_DIR=/srv/costume-tree/photos
+APP_UID=1000
+APP_GID=1000
+PORT=8081
 ```
 
-The image runs as UID/GID `65532:65532`. `/healthz` performs a lightweight database readiness check and returns HTTP 200 only after startup migration, integrity, schema, and migration-history validation succeed. Startup exits non-zero for an unreadable, corrupt, incompatible, or partially migrated database.
-
-The process applies embedded migrations transactionally. It never replays migrations over a database that has user tables but no migration history. SIGINT and SIGTERM stop the HTTP server within the configured shutdown timeout.
+The `/healthz` endpoint performs a lightweight external PostgreSQL readiness check and returns HTTP 200 only after startup migration and schema-history validation succeed. Startup exits non-zero if PostgreSQL is unreachable, credentials are invalid, or the schema is incompatible or partially migrated.
 
 ## Costume item photos
 
 Add or edit a costume item to attach a JPEG, PNG, or GIF photo up to 20 MiB, 60 megapixels, and 16,384 pixels on either axis. The original is saved immediately with a name beginning with the immutable costume code and a UTC timestamp, for example `C-0001-20260905T141530.123-a1b2c3d4.jpg`. Two background workers create a same-format display image with a maximum dimension of 1200 pixels and a thumbnail with a maximum dimension of 320 pixels. Item pages show a processing graphic and poll until the derivatives are ready; persisted pending work resumes after a restart.
 
-Photo files are separate from the SQLite backup. Back up both the database volume and `COSTUMETREE_DIR` to preserve complete records.
+Photo files are not stored in PostgreSQL. Back up both PostgreSQL and `COSTUMETREE_DIR` to preserve complete records.
 
 ## Removing costume items
 
 The actor item-management page provides a confirmed **Delete** action. Delete removes the piece from active inventory by archiving it; the immutable code and detail history remain available for production records.
 
-## Backup and cold restore
+## PostgreSQL backup and restore
 
-Backups use SQLite `VACUUM INTO`, so a live WAL database is not copied naively. Run the backup command as the application user while the container is serving:
+The database remains under the external server operator’s control. The recipes use local PostgreSQL client tools and the connection values from `.env`; they never start or enter a database container.
 
-```sh
-docker exec costume-tree /costume-tree backup /data/backups/costume-tree-$(date +%Y%m%d).db
-```
-
-The destination must be a new path in an owned directory. The command validates integrity and schema before and after creating the backup.
-
-Restore is deliberately cold and never overwrites an existing path. Mount the fresh application volume at `/data` so the non-root process owns the destination:
+Create a native custom-format backup while the application is serving:
 
 ```sh
-docker run --rm \
-  -v costume-tree-data:/source \
-  -v costume-tree-restore:/data \
-  costume-tree:dev \
-  restore /source/backups/costume-tree-20260905.db /data/restored.db
+just pg-dump backups/costume-tree-$(date +%Y%m%d).dump
 ```
 
-Validate the restored file by starting a stopped container against it:
+Copy or snapshot `COSTUMETREE_DIR` separately. Restore is a cold operation: the recipe stops only the application container, runs `pg_restore --clean --if-exists --single-transaction` against the configured external database, and restarts the application after success:
 
 ```sh
-docker run --rm --name costume-tree-restore \
-  -p 8081:8080 \
-  -e COSTUME_TREE_DB_PATH=/data/restored.db \
-  -v costume-tree-restore:/data \
-  costume-tree:dev
+just pg-restore backups/costume-tree-20260912.dump
 ```
 
-Before an upgrade: stop the old container, create and verify a backup, build the new image, and start the new image against the same volume. If startup validation fails, stop it and restart the prior image against the unchanged volume; do not delete or overwrite the backup.
+Keep a verified dump before upgrades. Coordinate retention, availability, and point-in-time recovery with the external PostgreSQL operator; this repository does not manage the server’s storage lifecycle.
+
+## Migrating an existing SQLite database
+
+The one-time loader imports an existing SQLite database into the external PostgreSQL server while preserving identifiers, production-scoped costume codes, timestamps, and relationships. It requires Bash, `sqlite3`, `psql`, and either `sha256sum` or `shasum`. Ensure that server is reachable, export the connection environment, and pass the source file as the only positional argument:
+
+```sh
+set -a
+. ./.env
+set +a
+scripts/migrate-sqlite-to-postgres.sh /path/to/costume-tree.db
+```
+
+The loader uses the same `PG_HOST`, `PG_PORT`, `PG_USER`, `PG_PASSWORD`, `PG_DATABASE`, and `PG_SSLMODE` contract as the application. If the target database is unreachable because it does not exist, `PG_ADMIN_DB` selects the administrative database used to create it and defaults to `postgres`; an existing target does not require administrative-database access or `CREATEDB`. The loader initializes only the application’s `public` schema and leaves extension-owned schemas untouched. It is idempotent and may be rerun after interruption; it does not modify the source SQLite file. Stop the application while loading, then start it after the loader completes:
+
+```sh
+just start
+```
+
+Take a source-file backup before migration and retain it until row counts, photos, immutable IDs, codes, and application workflows have been verified in PostgreSQL.
 
 ## Architecture
 
-- `cmd/costume-tree`: composition root, signal handling, operator commands, request limits.
-- `internal/config`: validated environment configuration.
-- `internal/storage`: embedded migrations, SQLite setup/readiness, repositories, aggregate queries, backup/restore.
+- `cmd/costume-tree`: composition root, signal handling, and request limits.
+- `internal/config`: validated environment configuration and PostgreSQL URL construction.
+- `internal/storage`: pgx-backed PostgreSQL connection, embedded migrations, readiness, repositories, and aggregate queries.
 - `internal/photos`: upload validation, atomic original storage, bounded background resizing, and pending-work recovery.
 - `internal/bulk`: pure blank-line-delimited bulk-input parser.
 - `internal/web`: route composition, handlers, server-rendered templates, HTMX fragments, and local static assets.
 - `internal/web/templates`: progressive-enhancement HTML; ordinary POST/GET requests remain canonical when JavaScript is unavailable.
 - `internal/web/assets`: vendored HTMX and Alpine scripts, application CSS, and local brand and web-app assets; no runtime asset network access.
 
-The web layer owns HTTP and rendering. HTMX requests receive focused server-rendered fragments; Alpine is used only for local presentation behavior. SQLite remains authoritative for all state, identifiers, aggregates, filters, and optimistic edit timestamps.
+The web layer owns HTTP and rendering. HTMX requests receive focused server-rendered fragments; Alpine is used only for local presentation behavior. PostgreSQL remains authoritative for all state, identifiers, aggregates, filters, and optimistic edit timestamps.
 
 ## Verification
 
+Database-backed tests require `PG_TEST_URL` for a disposable PostgreSQL cluster. They create and remove isolated schemas, a database, and a login role; use a dedicated local administrator and never point this variable at production. Without it, the test run fails immediately.
+
 ```sh
-go test ./...
-go vet ./...
+PG_TEST_URL='postgres://costume_tree:password@127.0.0.1:5432/costume_tree_test?sslmode=disable' just check
 docker build -t costume-tree:dev .
 ```
 

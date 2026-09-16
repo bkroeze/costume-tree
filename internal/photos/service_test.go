@@ -31,6 +31,7 @@ type photoRepository struct {
 	pendingCalls      int
 	pendingFailures   int
 	markReadyFailures int
+	markReadyStarted  chan struct{}
 }
 
 func newPhotoRepository() *photoRepository {
@@ -112,7 +113,12 @@ func (r *photoRepository) ListPending(_ context.Context, limit int) ([]storage.C
 	return result, nil
 }
 
-func (r *photoRepository) MarkReady(_ context.Context, photoID int64) (storage.CostumeItemPhoto, error) {
+func (r *photoRepository) MarkReady(ctx context.Context, photoID int64) (storage.CostumeItemPhoto, error) {
+	if r.markReadyStarted != nil {
+		close(r.markReadyStarted)
+		<-ctx.Done()
+		return storage.CostumeItemPhoto{}, ctx.Err()
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.markReadyFailures > 0 {
@@ -235,6 +241,36 @@ func TestDispatcherRetriesTransientRepositoryFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForStatus(t, repository, photo.ID, storage.PhotoStatusReady)
+}
+
+func TestCloseCancelsBlockedPhotoTransition(t *testing.T) {
+	repository := newPhotoRepository()
+	repository.markReadyStarted = make(chan struct{})
+	service, err := New(t.TempDir(), repository, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Upload(context.Background(), storage.CostumeItem{ID: 8, ProductionID: 3, Code: "CT-0044"}, jpegHeader(t, "cancel.jpg", 40, 20)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-repository.markReadyStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("photo transition did not start")
+	}
+	closed := make(chan struct{})
+	go func() {
+		service.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Fatal("Close blocked on a canceled photo transition")
+	}
 }
 
 func TestValidateUsesActualSizeAndDecodedFormat(t *testing.T) {

@@ -58,11 +58,10 @@ func validatePhotoInput(input CreateCostumeItemPhotoInput) (CreateCostumeItemPho
 
 func scanCostumeItemPhoto(scanner interface{ Scan(...any) error }) (CostumeItemPhoto, error) {
 	var photo CostumeItemPhoto
-	var created, updated string
 	if err := scanner.Scan(
 		&photo.ID, &photo.ProductionID, &photo.CostumeItemID,
 		&photo.OriginalName, &photo.DisplayName, &photo.ThumbnailName,
-		&photo.MediaType, &photo.Status, &photo.ErrorMessage, &created, &updated,
+		&photo.MediaType, &photo.Status, &photo.ErrorMessage, &photo.CreatedAt, &photo.UpdatedAt,
 	); err != nil {
 		return CostumeItemPhoto{}, err
 	}
@@ -81,20 +80,15 @@ func scanCostumeItemPhoto(scanner interface{ Scan(...any) error }) (CostumeItemP
 	if err := validatePhotoStatus(photo.Status); err != nil {
 		return CostumeItemPhoto{}, err
 	}
-	var err error
-	if photo.CreatedAt, err = parseTimestamp(created); err != nil {
-		return CostumeItemPhoto{}, err
-	}
-	if photo.UpdatedAt, err = parseTimestamp(updated); err != nil {
-		return CostumeItemPhoto{}, err
-	}
+	photo.CreatedAt = photo.CreatedAt.UTC()
+	photo.UpdatedAt = photo.UpdatedAt.UTC()
 	return photo, nil
 }
 
 func ensureCostumeItemForPhoto(ctx context.Context, query rowQuerier, productionID, costumeItemID int64) error {
-	var archived string
+	var archived sql.NullTime
 	if err := query.QueryRowContext(ctx,
-		`SELECT COALESCE(archived_at, '') FROM costume_items WHERE production_id = ? AND id = ?`,
+		`SELECT archived_at FROM costume_items WHERE production_id = $1 AND id = $2`,
 		productionID, costumeItemID,
 	).Scan(&archived); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -102,7 +96,7 @@ func ensureCostumeItemForPhoto(ctx context.Context, query rowQuerier, production
 		}
 		return err
 	}
-	if archived != "" {
+	if archived.Valid {
 		return ErrArchived
 	}
 	return nil
@@ -134,22 +128,19 @@ func (r *costumeItemPhotoRepository) Create(ctx context.Context, input CreateCos
 	if err := ensureCostumeItemForPhoto(ctx, tx, input.ProductionID, input.CostumeItemID); err != nil {
 		return CostumeItemPhoto{}, err
 	}
-	result, err := tx.ExecContext(ctx,
+	var id int64
+	if err := tx.QueryRowContext(ctx,
 		`INSERT INTO costume_item_photos
 		 (production_id, costume_item_id, original_name, display_name, thumbnail_name, media_type)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 RETURNING id`,
 		input.ProductionID, input.CostumeItemID, input.OriginalName,
 		input.DisplayName, input.ThumbnailName, input.MediaType,
-	)
-	if err != nil {
+	).Scan(&id); err != nil {
 		return CostumeItemPhoto{}, fmt.Errorf("storage: create costume item photo: %w", err)
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return CostumeItemPhoto{}, fmt.Errorf("storage: create costume item photo id: %w", err)
-	}
 	photo, err := scanCostumeItemPhoto(tx.QueryRowContext(ctx,
-		`SELECT `+costumeItemPhotoColumns+` FROM costume_item_photos WHERE id = ?`, id,
+		`SELECT `+costumeItemPhotoColumns+` FROM costume_item_photos WHERE id = $1`, id,
 	))
 	if err != nil {
 		return CostumeItemPhoto{}, fmt.Errorf("storage: read costume item photo: %w", err)
@@ -168,7 +159,7 @@ func (r *costumeItemPhotoRepository) Get(ctx context.Context, productionID, cost
 	photo, err := scanCostumeItemPhoto(db.QueryRowContext(ctx,
 		`SELECT `+costumeItemPhotoColumns+`
 		 FROM costume_item_photos
-		 WHERE production_id = ? AND costume_item_id = ? AND id = ?`,
+		 WHERE production_id = $1 AND costume_item_id = $2 AND id = $3`,
 		productionID, costumeItemID, photoID,
 	))
 	if err != nil {
@@ -188,7 +179,7 @@ func (r *costumeItemPhotoRepository) List(ctx context.Context, productionID, cos
 	return listCostumeItemPhotos(ctx, db,
 		`SELECT `+costumeItemPhotoColumns+`
 		 FROM costume_item_photos
-		 WHERE production_id = ? AND costume_item_id = ?
+		 WHERE production_id = $1 AND costume_item_id = $2
 		 ORDER BY created_at, id`,
 		[]any{productionID, costumeItemID}, "list costume item photos",
 	)
@@ -206,7 +197,7 @@ func (r *costumeItemPhotoRepository) ListFirstReadyByActor(ctx context.Context, 
 		 FROM costume_item_photos AS p
 		 JOIN costume_items AS i
 		   ON i.production_id = p.production_id AND i.id = p.costume_item_id
-		 WHERE p.production_id = ? AND i.actor_id = ? AND p.status = 'ready'
+		 WHERE p.production_id = $1 AND i.actor_id = $2 AND p.status = 'ready'
 		   AND p.id = (
 		       SELECT candidate.id
 		       FROM costume_item_photos AS candidate
@@ -234,7 +225,7 @@ func (r *costumeItemPhotoRepository) ListPending(ctx context.Context, limit int)
 		 FROM costume_item_photos
 		 WHERE status = 'pending'
 		 ORDER BY created_at, id
-		 LIMIT ?`,
+		 LIMIT $1`,
 		[]any{limit}, "list pending costume item photos",
 	)
 }
@@ -280,8 +271,8 @@ func (r *costumeItemPhotoRepository) transition(ctx context.Context, photoID int
 	}
 	photo, err := scanCostumeItemPhoto(db.QueryRowContext(ctx,
 		`UPDATE costume_item_photos
-		 SET status = ?, error_message = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-		 WHERE id = ? AND status = ?
+		 SET status = $1, error_message = $2, updated_at = CURRENT_TIMESTAMP
+		 WHERE id = $3 AND status = $4
 		 RETURNING `+costumeItemPhotoColumns,
 		status, errorMessage, photoID, PhotoStatusPending,
 	))
@@ -292,7 +283,7 @@ func (r *costumeItemPhotoRepository) transition(ctx context.Context, photoID int
 		return CostumeItemPhoto{}, fmt.Errorf("storage: mark costume item photo %s: %w", status, err)
 	}
 	var currentStatus string
-	if err := db.QueryRowContext(ctx, `SELECT status FROM costume_item_photos WHERE id = ?`, photoID).Scan(&currentStatus); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT status FROM costume_item_photos WHERE id = $1`, photoID).Scan(&currentStatus); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return CostumeItemPhoto{}, notFound("costume item photo")
 		}

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,15 +14,7 @@ import (
 
 func bulkWebFixture(t *testing.T) (*BulkImportHandler, *storage.DB, storage.Production, context.Context) {
 	t.Helper()
-	db, err := storage.Open(filepath.Join(t.TempDir(), "bulk-web.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	ctx := context.Background()
-	if err := db.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	db, ctx := openWebTestDB(t)
 	production, err := storage.NewProductionRepository(db).Create(ctx, storage.CreateProductionInput{Name: "Macbeth"})
 	if err != nil {
 		t.Fatal(err)

@@ -3,23 +3,15 @@ package storage
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"testing"
+	"time"
 
 	bulkinput "costume-tree/internal/bulk"
 )
 
 func bulkStorageFixture(t *testing.T) (*DB, Production, context.Context) {
 	t.Helper()
-	db, err := Open(filepath.Join(t.TempDir(), "bulk.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	ctx := context.Background()
-	if err := db.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	db, ctx := openTestDB(t)
 	production, err := NewProductionRepository(db).Create(ctx, CreateProductionInput{Name: "Macbeth"})
 	if err != nil {
 		t.Fatal(err)
@@ -113,5 +105,99 @@ func TestBulkImportRollbackLeavesNoNewRecords(t *testing.T) {
 	}
 	if len(items) != 0 {
 		t.Fatalf("items after rollback = %#v", items)
+	}
+}
+
+func TestConcurrentBulkImportsSerializeProductionScope(t *testing.T) {
+	db, production, ctx := bulkStorageFixture(t)
+	if _, err := NewItemTypeRepository(db).Create(ctx, CreateItemTypeInput{ProductionID: production.ID, Name: "Cloak"}); err != nil {
+		t.Fatal(err)
+	}
+	blocks, err := bulkinput.Parse("Concurrent Actor\nCloak")
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstImporter := NewBulkImporter(db)
+	secondImporter := NewBulkImporter(db)
+	first, err := firstImporter.Preview(ctx, production.ID, blocks, false)
+	if err != nil || !first.Valid {
+		t.Fatalf("first preview = %#v, err = %v", first, err)
+	}
+	second, err := secondImporter.Preview(ctx, production.ID, blocks, false)
+	if err != nil || !second.Valid {
+		t.Fatalf("second preview = %#v, err = %v", second, err)
+	}
+
+	blocker, err := db.SQL().BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = blocker.Rollback() }()
+	var lockedID int64
+	var blockerPID int
+	if err := blocker.QueryRowContext(ctx, `SELECT id, pg_backend_pid() FROM productions WHERE id = $1 FOR UPDATE`, production.ID).Scan(&lockedID, &blockerPID); err != nil {
+		t.Fatal(err)
+	}
+
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	for _, commit := range []func() ([]CostumeItem, error){
+		func() ([]CostumeItem, error) { return firstImporter.Commit(ctx, first) },
+		func() ([]CostumeItem, error) { return secondImporter.Commit(ctx, second) },
+	} {
+		go func(commit func() ([]CostumeItem, error)) {
+			<-start
+			_, err := commit()
+			results <- err
+		}(commit)
+	}
+	close(start)
+	contentionDeadline := time.NewTimer(5 * time.Second)
+	contentionPoll := time.NewTicker(10 * time.Millisecond)
+	defer contentionDeadline.Stop()
+	defer contentionPoll.Stop()
+	for {
+		var waiters int
+		if err := db.SQL().QueryRowContext(ctx, `
+			SELECT count(*)
+			FROM pg_stat_activity
+			WHERE datname = current_database()
+			  AND $1 = ANY(pg_blocking_pids(pid))`, blockerPID).Scan(&waiters); err != nil {
+			t.Fatal(err)
+		}
+		if waiters > 0 {
+			break
+		}
+		select {
+		case err := <-results:
+			t.Fatalf("bulk import completed without waiting on the production lock: %v", err)
+		case <-contentionPoll.C:
+		case <-contentionDeadline.C:
+			t.Fatal("bulk imports did not contend on the production lock")
+		}
+	}
+
+	if _, err := blocker.ExecContext(ctx, `INSERT INTO actors (production_id, name) VALUES ($1, $2)`, production.ID, "Concurrent Actor"); err != nil {
+		t.Fatal(err)
+	}
+	if err := blocker.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		select {
+		case err := <-results:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("concurrent bulk import did not complete")
+		}
+	}
+	actors, err := NewActorRepository(db).List(ctx, production.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(actors) != 1 || actors[0].Name != "Concurrent Actor" {
+		t.Fatalf("actors = %#v, want one shared actor", actors)
 	}
 }

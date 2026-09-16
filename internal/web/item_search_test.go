@@ -1,11 +1,9 @@
 package web
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,15 +12,7 @@ import (
 )
 
 func TestItemSearchHandlerRendersCanonicalFiltersAndHTMXResults(t *testing.T) {
-	db, err := storage.Open(filepath.Join(t.TempDir(), "search-handler.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	ctx := context.Background()
-	if err := db.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	db, ctx := openWebTestDB(t)
 	productions := storage.NewProductionRepository(db)
 	actors := storage.NewActorRepository(db)
 	types := storage.NewItemTypeRepository(db)
