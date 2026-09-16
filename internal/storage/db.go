@@ -124,7 +124,7 @@ func (d *DB) Migrate(ctx context.Context) (migrateErr error) {
 	if err != nil {
 		return fmt.Errorf("storage: acquire migration connection: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, migrationAdvisoryLockKey); err != nil {
 		return fmt.Errorf("storage: acquire migration lock: %w", err)
 	}

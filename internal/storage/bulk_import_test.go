@@ -132,7 +132,7 @@ func TestConcurrentBulkImportsSerializeProductionScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer blocker.Rollback()
+	defer func() { _ = blocker.Rollback() }()
 	var lockedID int64
 	var blockerPID int
 	if err := blocker.QueryRowContext(ctx, `SELECT id, pg_backend_pid() FROM productions WHERE id = $1 FOR UPDATE`, production.ID).Scan(&lockedID, &blockerPID); err != nil {

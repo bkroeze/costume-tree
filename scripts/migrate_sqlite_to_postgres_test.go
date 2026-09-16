@@ -66,7 +66,7 @@ func TestSQLiteMigrationInitialLoadSafeRerunAndLeastPrivilege(t *testing.T) {
 	targetConfig := config.Copy()
 	targetConfig.Database = databaseName
 	target := stdlib.OpenDB(*targetConfig)
-	defer target.Close()
+	defer func() { _ = target.Close() }()
 	var historyCount, productionCount int
 	if err := target.QueryRowContext(ctx, `SELECT count(*) FROM public.schema_migrations`).Scan(&historyCount); err != nil {
 		t.Fatal(err)

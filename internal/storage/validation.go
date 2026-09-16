@@ -106,7 +106,7 @@ func tableColumns(ctx context.Context, queryer sqlQueryer, table string) (map[st
 	if err != nil {
 		return nil, fmt.Errorf("%w: inspect table %q: %v", ErrInvalidDatabase, table, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	found := make(map[string]bool)
 	for rows.Next() {
 		var name string

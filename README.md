@@ -15,7 +15,7 @@ The application serves on port `8080`. PostgreSQL owns the structured data, whil
 Create a gitignored `.env` in the repository root for local commands and Compose:
 
 ```dotenv
-PG_HOST=127.0.0.1
+PG_HOST=database.example.com
 PG_PORT=5432
 PG_USER=costume_tree
 PG_PASSWORD=replace-with-a-long-random-password
@@ -131,7 +131,7 @@ Keep a verified dump before upgrades. Coordinate retention, availability, and po
 
 ## Migrating an existing SQLite database
 
-The one-time loader imports an existing SQLite database into the external PostgreSQL server while preserving identifiers, production-scoped costume codes, timestamps, and relationships. Ensure that server is reachable, export the connection environment, and pass the source file as the only positional argument:
+The one-time loader imports an existing SQLite database into the external PostgreSQL server while preserving identifiers, production-scoped costume codes, timestamps, and relationships. It requires Bash, `sqlite3`, `psql`, and either `sha256sum` or `shasum`. Ensure that server is reachable, export the connection environment, and pass the source file as the only positional argument:
 
 ```sh
 set -a
@@ -140,7 +140,7 @@ set +a
 scripts/migrate-sqlite-to-postgres.sh /path/to/costume-tree.db
 ```
 
-The loader uses the same `PG_HOST`, `PG_PORT`, `PG_USER`, `PG_PASSWORD`, `PG_DATABASE`, and `PG_SSLMODE` contract as the application. `PG_ADMIN_DB` optionally selects the administrative database and defaults to `postgres`. It creates `PG_DATABASE` when absent, initializes only the application’s `public` schema, and leaves extension-owned schemas untouched. It is idempotent and may be rerun after interruption; it does not modify the source SQLite file. Stop the application while loading, then start it after the loader completes:
+The loader uses the same `PG_HOST`, `PG_PORT`, `PG_USER`, `PG_PASSWORD`, `PG_DATABASE`, and `PG_SSLMODE` contract as the application. If the target database is unreachable because it does not exist, `PG_ADMIN_DB` selects the administrative database used to create it and defaults to `postgres`; an existing target does not require administrative-database access or `CREATEDB`. The loader initializes only the application’s `public` schema and leaves extension-owned schemas untouched. It is idempotent and may be rerun after interruption; it does not modify the source SQLite file. Stop the application while loading, then start it after the loader completes:
 
 ```sh
 just start
