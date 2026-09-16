@@ -73,9 +73,16 @@ psql:
 
 # Write a custom-format backup from the external PostgreSQL server.
 pg-dump output="backups/costume-tree.dump":
-    @mkdir -p "$(dirname '{{output}}')"
-    @PGHOST="$PG_HOST" PGPORT="${PG_PORT:-5432}" PGUSER="$PG_USER" PGPASSWORD="$PG_PASSWORD" PGDATABASE="${PG_DATABASE:-costume_tree}" PGSSLMODE="${PG_SSLMODE:-prefer}" pg_dump --format=custom --no-owner --no-privileges > '{{output}}'
-    @printf 'backup: %s\n' '{{output}}'
+    @output='{{output}}'; \
+        directory="$(dirname "$output")"; \
+        mkdir -p "$directory"; \
+        temporary="$(mktemp "$directory/.costume-tree.dump.XXXXXX")"; \
+        chmod 600 "$temporary"; \
+        trap 'rm -f -- "$temporary"' EXIT; \
+        PGHOST="$PG_HOST" PGPORT="${PG_PORT:-5432}" PGUSER="$PG_USER" PGPASSWORD="$PG_PASSWORD" PGDATABASE="${PG_DATABASE:-costume_tree}" PGSSLMODE="${PG_SSLMODE:-prefer}" pg_dump --format=custom --no-owner --no-privileges > "$temporary"; \
+        mv -f -- "$temporary" "$output"; \
+        trap - EXIT; \
+        printf 'backup: %s\n' "$output"
 
 # Cold-restore a custom-format backup to the external PostgreSQL server.
 pg-restore backup:
