@@ -38,15 +38,19 @@ type migration struct {
 }
 
 // Open opens and verifies a PostgreSQL connection pool.
-func Open(connectionString string) (*DB, error) {
+func Open(connectionString string, maxOpenConns int) (*DB, error) {
 	if strings.TrimSpace(connectionString) == "" {
 		return nil, errors.New("storage: PostgreSQL connection string is required")
+	}
+	if maxOpenConns <= 0 {
+		return nil, errors.New("storage: maximum open connections must be positive")
 	}
 
 	db, err := sql.Open("pgx", connectionString)
 	if err != nil {
 		return nil, fmt.Errorf("storage: open database: %w", err)
 	}
+	db.SetMaxOpenConns(maxOpenConns)
 	pingCtx, cancelPing := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelPing()
 	if err := db.PingContext(pingCtx); err != nil {

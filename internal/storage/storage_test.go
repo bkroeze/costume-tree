@@ -18,9 +18,12 @@ func openTestDB(t *testing.T) (*DB, context.Context) {
 func openTestSchema(t *testing.T, migrate bool) (*DB, context.Context) {
 	t.Helper()
 	isolatedConnectionString, ctx := testdb.OpenSchema(t)
-	db, err := Open(isolatedConnectionString)
+	db, err := Open(isolatedConnectionString, 4)
 	if err != nil {
 		t.Fatalf("open isolated test schema: %v", err)
+	}
+	if got := db.SQL().Stats().MaxOpenConnections; got != 4 {
+		t.Fatalf("maximum open connections = %d, want 4", got)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	if migrate {

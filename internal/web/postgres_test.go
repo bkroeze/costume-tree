@@ -11,7 +11,7 @@ import (
 func openWebTestDB(t *testing.T) (*storage.DB, context.Context) {
 	t.Helper()
 	isolatedConnectionString, ctx := testdb.OpenSchema(t)
-	db, err := storage.Open(isolatedConnectionString)
+	db, err := storage.Open(isolatedConnectionString, 4)
 	if err != nil {
 		t.Fatalf("open isolated test schema: %v", err)
 	}

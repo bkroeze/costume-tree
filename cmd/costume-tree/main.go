@@ -31,7 +31,7 @@ func run(logger *slog.Logger) (runErr error) {
 		return err
 	}
 
-	database, err := storage.Open(settings.PostgresURL())
+	database, err := storage.Open(settings.PostgresURL(), settings.DBMaxOpenConns)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}

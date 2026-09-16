@@ -36,6 +36,9 @@ func TestLoadDefaultsAndOverrides(t *testing.T) {
 		if settings.PGSSLMode != "prefer" {
 			t.Errorf("PGSSLMode = %q, want prefer", settings.PGSSLMode)
 		}
+		if settings.DBMaxOpenConns != 20 {
+			t.Errorf("DBMaxOpenConns = %d, want 20", settings.DBMaxOpenConns)
+		}
 		if settings.CostumeTreeDir != "." {
 			t.Errorf("CostumeTreeDir = %q, want .", settings.CostumeTreeDir)
 		}
@@ -59,6 +62,7 @@ func TestLoadDefaultsAndOverrides(t *testing.T) {
 			"PG_PASSWORD":                   "different-secret",
 			"PG_DATABASE":                   "wardrobe_test",
 			"PG_SSLMODE":                    "verify-full",
+			"DB_MAX_OPEN_CONNS":             "12",
 			"COSTUMETREE_DIR":               "/srv/photos/../costume-tree/",
 			"COSTUME_TREE_SHUTDOWN_TIMEOUT": "3s",
 			"COSTUME_TREE_REQUEST_TIMEOUT":  "7s",
@@ -76,6 +80,9 @@ func TestLoadDefaultsAndOverrides(t *testing.T) {
 		}
 		if settings.PGDatabase != "wardrobe_test" || settings.PGSSLMode != "verify-full" {
 			t.Errorf("PostgreSQL target = %q sslmode=%q, want wardrobe_test sslmode=verify-full", settings.PGDatabase, settings.PGSSLMode)
+		}
+		if settings.DBMaxOpenConns != 12 {
+			t.Errorf("DBMaxOpenConns = %d, want 12", settings.DBMaxOpenConns)
 		}
 		if settings.CostumeTreeDir != "/srv/costume-tree" {
 			t.Errorf("CostumeTreeDir = %q, want /srv/costume-tree", settings.CostumeTreeDir)
@@ -113,9 +120,10 @@ func TestLoadRequiresPostgresCredentials(t *testing.T) {
 
 func TestLoadRejectsInvalidPostgresOptions(t *testing.T) {
 	for name, value := range map[string]string{
-		"PG_PORT":     "0",
-		"PG_DATABASE": "",
-		"PG_SSLMODE":  "",
+		"PG_PORT":           "0",
+		"PG_DATABASE":       "",
+		"PG_SSLMODE":        "",
+		"DB_MAX_OPEN_CONNS": "0",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := Load(postgresLookup(map[string]string{name: value})); err == nil {

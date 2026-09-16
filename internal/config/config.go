@@ -15,6 +15,7 @@ const (
 	defaultPGPort          = 5432
 	defaultPGDatabase      = "costume_tree"
 	defaultPGSSLMode       = "prefer"
+	defaultDBMaxOpenConns  = 20
 	defaultCostumeTreeDir  = "."
 	defaultShutdownTimeout = 10 * time.Second
 	defaultRequestTimeout  = 30 * time.Second
@@ -31,6 +32,7 @@ type Settings struct {
 	PGPassword      string
 	PGDatabase      string
 	PGSSLMode       string
+	DBMaxOpenConns  int
 	CostumeTreeDir  string
 	ShutdownTimeout time.Duration
 	RequestTimeout  time.Duration
@@ -61,6 +63,7 @@ func Load(lookup func(string) (string, bool)) (Settings, error) {
 		PGPort:          defaultPGPort,
 		PGDatabase:      defaultPGDatabase,
 		PGSSLMode:       defaultPGSSLMode,
+		DBMaxOpenConns:  defaultDBMaxOpenConns,
 		CostumeTreeDir:  defaultCostumeTreeDir,
 		ShutdownTimeout: defaultShutdownTimeout,
 		RequestTimeout:  defaultRequestTimeout,
@@ -107,6 +110,13 @@ func Load(lookup func(string) (string, bool)) (Settings, error) {
 			return Settings{}, fmt.Errorf("config: PG_SSLMODE must not be empty")
 		}
 		settings.PGSSLMode = value
+	}
+	if value, ok := lookup("DB_MAX_OPEN_CONNS"); ok {
+		maxOpenConns, err := strconv.Atoi(value)
+		if err != nil || maxOpenConns <= 0 {
+			return Settings{}, fmt.Errorf("config: DB_MAX_OPEN_CONNS must be a positive integer")
+		}
+		settings.DBMaxOpenConns = maxOpenConns
 	}
 
 	if value, ok := lookup("COSTUMETREE_DIR"); ok {

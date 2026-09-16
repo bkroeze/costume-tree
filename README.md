@@ -21,13 +21,14 @@ PG_USER=costume_tree
 PG_PASSWORD=replace-with-a-long-random-password
 PG_DATABASE=costume_tree
 PG_SSLMODE=disable
+DB_MAX_OPEN_CONNS=20
 COSTUMETREE_DIR=./costume-tree-photos
 PORT=8080
 APP_UID=1000
 APP_GID=1000
 ```
 
-`PG_HOST`, `PG_USER`, and `PG_PASSWORD` are mandatory. `PG_PORT` defaults to `5432`, `PG_DATABASE` defaults to `costume_tree`, and `PG_SSLMODE` defaults to `prefer`. Use an SSL mode appropriate for the database provider; hosted production databases should normally use `verify-full` with trusted certificates. Credentials and database names are URL-escaped when the application constructs its connection string, and the connection string is not logged.
+`PG_HOST`, `PG_USER`, and `PG_PASSWORD` are mandatory. `PG_PORT` defaults to `5432`, `PG_DATABASE` defaults to `costume_tree`, `PG_SSLMODE` defaults to `prefer`, and `DB_MAX_OPEN_CONNS` defaults to `20`. Use an SSL mode appropriate for the database provider; hosted production databases should normally use `verify-full` with trusted certificates. Credentials and database names are URL-escaped when the application constructs its connection string, and the connection string is not logged.
 
 The remaining application settings are optional:
 

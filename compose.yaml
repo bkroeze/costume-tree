@@ -16,4 +16,3 @@ services:
         target: /photos
         bind:
           create_host_path: false
-    restart: unless-stopped

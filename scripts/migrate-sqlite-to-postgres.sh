@@ -264,11 +264,15 @@ psql_target_scalar() {
     printf '%s' "$output"
 }
 
-TARGET_DATABASE_EXISTS=$(psql_admin --set=target_database="$PG_DATABASE" --command "
+if psql_target --command 'SELECT 1;' >/dev/null 2>"$WORK_DIR/postgres-error.log"; then
+    TARGET_DATABASE_EXISTS=1
+else
+    TARGET_DATABASE_EXISTS=$(psql_admin --set=target_database="$PG_DATABASE" --command "
 SELECT CASE WHEN EXISTS (
     SELECT 1 FROM pg_database WHERE datname = :'target_database'
 ) THEN 1 ELSE 0 END;
-" 2>"$WORK_DIR/postgres-error.log") || die "cannot connect to the PostgreSQL admin database"
+" 2>"$WORK_DIR/postgres-error.log") || die "cannot connect to the target or PostgreSQL admin database"
+fi
 [[ $TARGET_DATABASE_EXISTS =~ ^[01]$ ]] || die "PostgreSQL returned an invalid target database status"
 
 if [[ $TARGET_DATABASE_EXISTS == 0 ]]; then
