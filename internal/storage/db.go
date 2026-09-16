@@ -30,7 +30,10 @@ type DB struct {
 	migrateMu sync.Mutex
 }
 
-const migrationAdvisoryLockKey int64 = 0x43545245454d4947
+const (
+	migrationAdvisoryLockKey int64 = 0x43545245454d4947
+	migrationUnlockTimeout         = 5 * time.Second
+)
 
 type migration struct {
 	version int
@@ -124,7 +127,11 @@ func (d *DB) Migrate(ctx context.Context) error {
 	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, migrationAdvisoryLockKey); err != nil {
 		return fmt.Errorf("storage: acquire migration lock: %w", err)
 	}
-	defer conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, migrationAdvisoryLockKey)
+	defer func() {
+		unlockCtx, cancelUnlock := context.WithTimeout(context.Background(), migrationUnlockTimeout)
+		defer cancelUnlock()
+		_, _ = conn.ExecContext(unlockCtx, `SELECT pg_advisory_unlock($1)`, migrationAdvisoryLockKey)
+	}()
 
 	hasHistory, err := tableExists(ctx, conn, "schema_migrations")
 	if err != nil {
