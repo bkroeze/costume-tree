@@ -134,7 +134,8 @@ func TestConcurrentBulkImportsSerializeProductionScope(t *testing.T) {
 	}
 	defer blocker.Rollback()
 	var lockedID int64
-	if err := blocker.QueryRowContext(ctx, `SELECT id FROM productions WHERE id = $1 FOR UPDATE`, production.ID).Scan(&lockedID); err != nil {
+	var blockerPID int
+	if err := blocker.QueryRowContext(ctx, `SELECT id, pg_backend_pid() FROM productions WHERE id = $1 FOR UPDATE`, production.ID).Scan(&lockedID, &blockerPID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -151,10 +152,29 @@ func TestConcurrentBulkImportsSerializeProductionScope(t *testing.T) {
 		}(commit)
 	}
 	close(start)
-	select {
-	case err := <-results:
-		t.Fatalf("bulk import completed before production lock was released: %v", err)
-	case <-time.After(250 * time.Millisecond):
+	contentionDeadline := time.NewTimer(5 * time.Second)
+	contentionPoll := time.NewTicker(10 * time.Millisecond)
+	defer contentionDeadline.Stop()
+	defer contentionPoll.Stop()
+	for {
+		var waiters int
+		if err := db.SQL().QueryRowContext(ctx, `
+			SELECT count(*)
+			FROM pg_stat_activity
+			WHERE datname = current_database()
+			  AND $1 = ANY(pg_blocking_pids(pid))`, blockerPID).Scan(&waiters); err != nil {
+			t.Fatal(err)
+		}
+		if waiters > 0 {
+			break
+		}
+		select {
+		case err := <-results:
+			t.Fatalf("bulk import completed without waiting on the production lock: %v", err)
+		case <-contentionPoll.C:
+		case <-contentionDeadline.C:
+			t.Fatal("bulk imports did not contend on the production lock")
+		}
 	}
 
 	if _, err := blocker.ExecContext(ctx, `INSERT INTO actors (production_id, name) VALUES ($1, $2)`, production.ID, "Concurrent Actor"); err != nil {

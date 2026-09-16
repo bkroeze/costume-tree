@@ -4,6 +4,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"embed"
 	"errors"
 	"fmt"
@@ -103,7 +104,7 @@ func (d *DB) Close() error {
 // Existing schemas without migration history are never modified unless they
 // are genuinely empty; this prevents a damaged or foreign schema from being
 // silently rebuilt over.
-func (d *DB) Migrate(ctx context.Context) error {
+func (d *DB) Migrate(ctx context.Context) (migrateErr error) {
 	if d == nil || d.db == nil {
 		return errors.New("storage: database is closed")
 	}
@@ -130,7 +131,16 @@ func (d *DB) Migrate(ctx context.Context) error {
 	defer func() {
 		unlockCtx, cancelUnlock := context.WithTimeout(context.Background(), migrationUnlockTimeout)
 		defer cancelUnlock()
-		_, _ = conn.ExecContext(unlockCtx, `SELECT pg_advisory_unlock($1)`, migrationAdvisoryLockKey)
+		var unlocked bool
+		unlockErr := conn.QueryRowContext(unlockCtx, `SELECT pg_advisory_unlock($1)`, migrationAdvisoryLockKey).Scan(&unlocked)
+		if unlockErr != nil {
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+		} else if !unlocked {
+			unlockErr = errors.New("migration advisory lock was not held")
+		}
+		if unlockErr != nil {
+			migrateErr = errors.Join(migrateErr, fmt.Errorf("storage: release migration lock: %w", unlockErr))
+		}
 	}()
 
 	hasHistory, err := tableExists(ctx, conn, "schema_migrations")
